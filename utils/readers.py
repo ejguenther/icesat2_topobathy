@@ -9,7 +9,77 @@ Created on Fri Jun 20 10:33:35 2025
 import os
 import numpy as np
 import h5py
-from typing import List
+from . import processing
+
+def get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt):
+    """
+    Reads and aligns data from ATL03, ATL08, and ATL24 files to the ATL03 photon rate.
+
+    This function orchestrates the reading of various datasets from three different
+    ICESat-2 data products. It aligns all data to the native resolution of the
+    ATL03 photon events for a specified ground track (gt) and compiles them
+    into a single, unified pandas DataFrame.
+
+    Args:
+        atl03_file (str): The file path for the ATL03 data file.
+        atl08_file (str): The file path for the corresponding ATL08 data file.
+        atl24_file (str): The file path for the corresponding ATL24 data file.
+        gt (str): The ground track identifier to process (e.g., 'gt1l', 'gt1r', 'gt2l', etc.).
+
+    Returns:
+        pd.DataFrame: A DataFrame where each row corresponds to a single ATL03
+                      photon event. The columns include aligned data from all
+                      three input products.
+    
+    Raises:
+        FileNotFoundError: If any of the input file paths do not exist.
+        KeyError: If a required HDF5 dataset is not found in a file.
+    """
+    # Read ATL03
+    f = h5py.File(atl03_file, 'r') 
+    
+    # Read photon rate ATL03 data
+    lon_ph = np.array(f['gt1r/heights/lon_ph'])
+    lat_ph = np.array(f['gt1r/heights/lat_ph'])
+    h_ph = np.array(f['gt1r/heights/h_ph'])
+    quality_ph = np.array(f['gt1r/heights/quality_ph'])
+    
+    # Read ATL03 segment rate at ATL03 photon rate
+    solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,'gt1r','/geolocation/solar_elevation')
+    alongtrack = processing.get_atl03_segment_to_photon(atl03_file,'gt1r','/geolocation/segment_dist_x')
+    alongtrack = alongtrack + np.array(f['gt1r/heights/dist_ph_along'])
+    
+    # Read ATL08 signal photon at ATL03 photon rate
+    atl08_class_ph = processing.get_atl08_class_to_atl03(atl03_file, atl08_file,'gt1r')
+    atl08_norm_h_ph = processing.get_atl08_norm_h_to_atl03(atl03_file, atl08_file,'gt1r')
+    
+    
+    # Read ATL24 photon rate at ATL03 photon rate
+    atl24_class_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, 'gt1r')
+    atl24_ortho_h_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, 'gt1r','/ortho_h')
+    
+    # Combine ATL08 and ATL4 classifications
+    combined_class_ph = processing.combine_atl08_and_atl24_classifications(atl08_class_ph,atl24_class_ph)
+    
+    # Create pandas dataframe
+    df_ph = pd.DataFrame(
+            {
+                "alongtrack": alongtrack,
+                "latitude":lat_ph,
+                "longitude":lon_ph,
+                "h_ph": h_ph,
+                "h_norm": atl08_norm_h_ph,
+                "ortho_h": atl24_ortho_h_ph,
+                "atl08_class":atl08_class_ph,
+                "atl24_class":atl24_class_ph,
+                "combined_class":combined_class_ph,
+                "solar_elevation":solar_elevation,
+                "quality_ph":quality_ph
+            }
+        )
+    
+    return df_ph
+
 
 def read_atl03_data_mapping(filepath: str, beam_label: str):
     """

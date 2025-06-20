@@ -408,3 +408,21 @@ def combine_atl08_and_atl24_classifications(array_a: np.ndarray, array_b: np.nda
 
     return result_array
 
+def get_measurement_type_string(df: pd.DataFrame, columns: list) -> pd.Series:
+    """
+    Identifies which measurements are present in a row and returns a 
+    single descriptive string.
+    """
+    # Create a boolean DataFrame where True means the value is not NaN
+    bool_df = df[columns].notna()
+    
+    # Use a flexible apply function to join the column names for each row
+    def get_names(row):
+        # Get names of columns where the row value is True
+        present_names = list(row.index[row])
+        if present_names:
+            return "-".join(present_names)
+        return "none"
+
+    return bool_df.apply(get_names, axis=1)
+    
