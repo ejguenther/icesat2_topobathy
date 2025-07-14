@@ -21,24 +21,24 @@ def get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt):
     f = h5py.File(atl03_file, 'r') 
     
     # Read photon rate ATL03 data
-    lon_ph = np.array(f['gt1r/heights/lon_ph'])
-    lat_ph = np.array(f['gt1r/heights/lat_ph'])
-    h_ph = np.array(f['gt1r/heights/h_ph'])
-    quality_ph = np.array(f['gt1r/heights/quality_ph'])
+    lon_ph = np.array(f[gt + '/heights/lon_ph'])
+    lat_ph = np.array(f[gt + '/heights/lat_ph'])
+    h_ph = np.array(f[gt + '/heights/h_ph'])
+    quality_ph = np.array(f[gt + '/heights/quality_ph'])
     
     # Read ATL03 segment rate at ATL03 photon rate
-    solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,'gt1r','/geolocation/solar_elevation')
-    alongtrack = processing.get_atl03_segment_to_photon(atl03_file,'gt1r','/geolocation/segment_dist_x')
-    alongtrack = alongtrack + np.array(f['gt1r/heights/dist_ph_along'])
+    solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
+    alongtrack = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/segment_dist_x')
+    alongtrack = alongtrack + np.array(f[gt + '/heights/dist_ph_along'])
     
     # Read ATL08 signal photon at ATL03 photon rate
-    atl08_class_ph = processing.get_atl08_class_to_atl03(atl03_file, atl08_file,'gt1r')
-    atl08_norm_h_ph = processing.get_atl08_norm_h_to_atl03(atl03_file, atl08_file,'gt1r')
+    atl08_class_ph = processing.get_atl08_class_to_atl03(atl03_file, atl08_file,gt)
+    atl08_norm_h_ph = processing.get_atl08_norm_h_to_atl03(atl03_file, atl08_file,gt)
     
     
     # Read ATL24 photon rate at ATL03 photon rate
-    atl24_class_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, 'gt1r')
-    atl24_ortho_h_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, 'gt1r','/ortho_h')
+    atl24_class_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt)
+    atl24_ortho_h_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt,'/ortho_h')
     
     # Combine ATL08 and ATL4 classifications
     combined_class_ph = processing.combine_atl08_and_atl24_classifications(atl08_class_ph,atl24_class_ph)
@@ -205,6 +205,6 @@ if __name__ == "__main__":
     gdf_seg = gpd.GeoDataFrame(df_seg, geometry=geometry_seg, crs="EPSG:4326")
     
     # Save geopandas dataframe
-    gdf_seg.to_file("is2_topobathy.gpkg", layer='atl08atl24', driver="GPKG")
+    gdf_seg.to_file("is2_topobathy_" + gt + ".gpkg", layer='atl08atl24', driver="GPKG")
     
 
