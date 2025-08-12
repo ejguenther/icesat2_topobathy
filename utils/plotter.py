@@ -21,3 +21,33 @@ def plot_alongtrack(alongtrack,h_ph,combined_class_ph,title):
     plt.legend(markerscale=3)
     plt.title(title)
     plt.show()
+    
+    
+def plot_alongtrack_als(df_als,title):
+    plt.figure()
+    plt.plot(df_als.alongtrack[df_als.classification == 7],df_als.z[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
+    plt.plot(df_als.alongtrack[df_als.classification == 1],df_als.z[df_als.classification == 1],'.',color=[0.8, 0.8, 0.8],label='Unclassified (1)')
+    plt.plot(df_als.alongtrack[df_als.classification == 2],df_als.z[df_als.classification == 2],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Ground (2)')
+    plt.plot(df_als.alongtrack[df_als.classification == 45],df_als.z[df_als.classification == 45],'.',color=[0.65098039, 0.98039215, 1.0],label='Water column (45)')
+    plt.plot(df_als.alongtrack[df_als.classification == 40],df_als.z[df_als.classification == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    plt.plot(df_als.alongtrack[df_als.classification == 41],df_als.z[df_als.classification == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    plt.xlabel('Alongtrack (m)')
+    plt.ylabel('Ellipsoid Height (m)')
+    plt.legend(markerscale=3)
+    plt.title(title)
+    plt.show()
+    
+    
+def plot_y_als(df_als,title):
+    plt.figure()
+    plt.plot(df_als.y[df_als.classification == 7],df_als.z[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
+    plt.plot(df_als.y[df_als.classification == 1],df_als.z[df_als.classification == 1],'.',color=[0.8, 0.8, 0.8],label='Unclassified (1)')
+    plt.plot(df_als.y[df_als.classification == 2],df_als.z[df_als.classification == 2],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Ground (2)')
+    plt.plot(df_als.y[df_als.classification == 45],df_als.z[df_als.classification == 45],'.',color=[0.65098039, 0.98039215, 1.0],label='Water column (45)')
+    plt.plot(df_als.y[df_als.classification == 40],df_als.z[df_als.classification == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    plt.plot(df_als.y[df_als.classification == 41],df_als.z[df_als.classification == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    plt.xlabel('Alongtrack (m)')
+    plt.ylabel('Ellipsoid Height (m)')
+    plt.legend(markerscale=3)
+    plt.title(title)
+    plt.show()
