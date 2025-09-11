@@ -13,6 +13,7 @@ import pandas as pd
 from typing import List, Union
 from . import readers
 
+
 def is_member(elements_to_check, reference_elements, comparison_mode='normal'):
     """
     Determines if elements of one array are present in another, similar to MATLAB's ismember function.
@@ -407,6 +408,16 @@ def combine_atl08_and_atl24_classifications(array_a: np.ndarray, array_b: np.nda
     result_array[condition_b_priority] = array_b[condition_b_priority]
 
     return result_array
+
+def identify_contested_photons(atl08_class, atl24_class):
+    atl08_class = np.array(atl08_class)
+    atl24_class = np.array(atl24_class)
+    atl08_class[atl08_class > 0] = 1
+    atl24_class[atl24_class > 0] = 10
+    contested_class = atl08_class + atl24_class
+    contested_class[contested_class == 10] = 2
+    contested_class[contested_class == 11] = 3
+    return contested_class
 
 def get_measurement_type_string(df: pd.DataFrame, columns: list) -> pd.Series:
     """

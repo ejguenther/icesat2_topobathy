@@ -123,3 +123,25 @@ def aggregate_segment_metrics(
     )
 
     return df_seg_out
+
+
+def normalize_heights(df, class_field = 'classification', 
+                      ground_class = [2], 
+                      ground_res = 1, 
+                      target_height = 'z',
+                      out_field = 'norm_h'):
+    # Statis variables
+    t_ind = np.int32(np.floor((df.alongtrack - np.min(df.alongtrack)) / ground_res))
+    df['t_ind'] = t_ind
+    
+    
+    df_g = df[df[class_field].isin(ground_class)]
+    df_g = df_g[['t_ind','alongtrack',class_field,target_height]]
+    zgroup = df_g.groupby('t_ind')
+    zout = zgroup.aggregate("median")
+    zout = zout.reindex(list(range(0,np.max(t_ind) + 1)))
+    zout = zout.interpolate(method='linear', axis=0).ffill().bfill()
+    ground = zout[target_height][df.t_ind]
+    norm_height = np.array(df[target_height]) - np.array(ground)
+    
+    return norm_height

@@ -24,8 +24,8 @@ from utils.geographic_utils import find_utm_zone_epsg
 # Constants for the analysis
 DECIMATION = 10         # Downsample lidar points by this factor
 ICESAT2BUFFER = 100    # Buffer around ICESat-2 gt to find ALS tiles
-CROSSTRACK_LIMIT = 6  # Final crosstrack distance filter in meters
-BBOX_BUFFER = 100      # Buffer around the trimmed line for coarse filtering
+CROSSTRACK_LIMIT = 5.5  # Final crosstrack distance filter in meters
+BBOX_BUFFER = 150      # Buffer around the trimmed line for coarse filtering
 
 def prepare_icesat2_track(df_seg, utm_epsg, skip_rate=1):
     """Prepares the ICESat-2 ground track data by creating a projected LineString."""
@@ -71,68 +71,93 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
     Processes a single lidar tile to extract points along the ICESat-2 track.
     This function is designed to be run in parallel.
     """
-    file_name, tile_geom = tile_info
-    # file_name = tile_info.file_name
-    # tile_geom = tile_info.geometry.buffer(100)
-    base_name = os.path.basename(file_name)
-    print(f"Processing tile: {base_name}")
-    
-    # 1. Read and project lidar data
-    las = laspy.read(file_name)
-    transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
-    x_coords, y_coords = transformer.transform(las.x[::DECIMATION], las.y[::DECIMATION])
-    points_xy = np.column_stack((x_coords, y_coords))
-    
-    # Read other las info to close the lasfile
-    z = np.array(las.z)
-    classification = np.array(las.classification)
-    
-    # 2. Trim the ICESat-2 line to the buffered tile extent for local analysis
-    trimmed_line = is2_line.intersection(tile_geom.buffer(BBOX_BUFFER))
-    if trimmed_line.is_empty:
-        return pd.DataFrame() # Return empty if no intersection
-
-    # 3. Perform a fast bounding box pre-filter on lidar points
-    min_x, min_y, max_x, max_y = trimmed_line.bounds
-    bbox_filter = (
-        (points_xy[:, 0] >= min_x - BBOX_BUFFER) & (points_xy[:, 0] <= max_x + BBOX_BUFFER) &
-        (points_xy[:, 1] >= min_y - BBOX_BUFFER) & (points_xy[:, 1] <= max_y + BBOX_BUFFER)
-    )
-    candidate_points_xy = points_xy[bbox_filter]
-    if len(candidate_points_xy) == 0:
-        return pd.DataFrame()
-
-    # 4. Calculate signed cross-track distance and filter
-    crosstrack_dist = estimate_signed_crosstrack(candidate_points_xy, trimmed_line)
-    crosstrack_mask = np.abs(crosstrack_dist) < CROSSTRACK_LIMIT
-    
-    final_points_xy = candidate_points_xy[crosstrack_mask]
-    if len(final_points_xy) == 0:
-        return pd.DataFrame()
+    try:
+        file_name, tile_geom = tile_info
+        # file_name = tile_info.file_name
+        # tile_geom = tile_info.geometry.buffer(100)
+        base_name = os.path.basename(file_name)
+        print(f"Processing tile: {base_name}")
         
-    # 5. Get vertices of the ICESat-2 line that are within the tile's buffered extent
-    polygon_path = Path(np.array(tile_geom.buffer(BBOX_BUFFER).exterior.coords))
-    original_vertices = np.vstack((is2_x, is2_y)).T
-    is_inside_mask = polygon_path.contains_points(original_vertices)
+        # 1. Read and project lidar data
+        las = laspy.read(file_name)
+        transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
+        x_coords, y_coords = transformer.transform(las.x[::DECIMATION], las.y[::DECIMATION])
+        points_xy = np.column_stack((x_coords, y_coords))
+        
+        # Read other las info to close the lasfile
+        z = np.array(las.z)
+        classification = np.array(las.classification)
+        
+        # 2. Trim the ICESat-2 line to the buffered tile extent for local analysis
+        trimmed_line = is2_line.intersection(tile_geom.buffer(BBOX_BUFFER))
+        if trimmed_line.is_empty:
+            return pd.DataFrame() # Return empty if no intersection
     
-    trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
-    trimmed_is2_at = is2_at[is_inside_mask]
-    trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
+        # 3. Perform a fast bounding box pre-filter on lidar points
+        min_x, min_y, max_x, max_y = trimmed_line.bounds
+        bbox_filter = (
+            (points_xy[:, 0] >= min_x - BBOX_BUFFER) & (points_xy[:, 0] <= max_x + BBOX_BUFFER) &
+            (points_xy[:, 1] >= min_y - BBOX_BUFFER) & (points_xy[:, 1] <= max_y + BBOX_BUFFER)
+        )
+        candidate_points_xy = points_xy[bbox_filter]
+        if len(candidate_points_xy) == 0:
+            return pd.DataFrame()
     
-    # 6. Calculate along-track distance for the final points
-    alongtrack_dist = estimate_alongtrack(final_points_xy, trimmed_line_from_vertices, 
-                                          trimmed_is2_x, trimmed_is2_y, trimmed_is2_at)
-
-    # 7. Create the final DataFrame for this tile
-    df_tile = pd.DataFrame({
-        'x': final_points_xy[:, 0],
-        'y': final_points_xy[:, 1],
-        'z': z[::DECIMATION][bbox_filter][crosstrack_mask],
-        'classification': classification[::DECIMATION][bbox_filter][crosstrack_mask],
-        'crosstrack': crosstrack_dist[crosstrack_mask],
-        'alongtrack': alongtrack_dist,
-        'file': base_name
-    })
+        # 4. Calculate signed cross-track distance and filter
+        crosstrack_dist = estimate_signed_crosstrack(candidate_points_xy, trimmed_line)
+        crosstrack_mask = np.abs(crosstrack_dist) < CROSSTRACK_LIMIT
+        
+        final_points_xy = candidate_points_xy[crosstrack_mask]
+        if len(final_points_xy) == 0:
+            return pd.DataFrame()
+            
+        # 5. Get vertices of the ICESat-2 line that are within the tile's buffered extent
+        polygon_path = Path(np.array(tile_geom.buffer(BBOX_BUFFER).exterior.coords))
+        original_vertices = np.vstack((is2_x, is2_y)).T
+        is_inside_mask = polygon_path.contains_points(original_vertices)
+        
+        trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
+        trimmed_is2_at = is2_at[is_inside_mask]
+        trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
+        
+        # 6. Calculate along-track distance for the final points
+        if len(final_points_xy) > 0:
+            alongtrack_dist = estimate_alongtrack(final_points_xy, trimmed_line_from_vertices, 
+                                                  trimmed_is2_x, trimmed_is2_y, trimmed_is2_at)
+        
+    
+            # 7. Create the final DataFrame for this tile
+            df_tile = pd.DataFrame({
+                'x': final_points_xy[:, 0],
+                'y': final_points_xy[:, 1],
+                'z': z[::DECIMATION][bbox_filter][crosstrack_mask],
+                'classification': classification[::DECIMATION][bbox_filter][crosstrack_mask],
+                'crosstrack': crosstrack_dist[crosstrack_mask],
+                'alongtrack': alongtrack_dist,
+                'file': base_name
+            })
+        else:
+            # 7. Create the final DataFrame for this tile
+            df_tile = pd.DataFrame({
+                'x': [],
+                'y': [],
+                'z': [],
+                'classification': [],
+                'crosstrack': [],
+                'alongtrack': [],
+                'file': []
+            })
+    except:
+        print(f"Failed to process tile: {base_name}")
+        df_tile = pd.DataFrame({
+            'x': [],
+            'y': [],
+            'z': [],
+            'classification': [],
+            'crosstrack': [],
+            'alongtrack': [],
+            'file': []
+        })
     return df_tile
 
 def create_als_swath(extent_gdf, df_seg, num_workers = 4):
@@ -156,7 +181,8 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
     df_list = []
     if num_workers == 1:
         for i in range(0,len(tiles_to_process)):
-            process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg)
+            df_tile_list = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg)
+            
         
     else:
         # Use a ProcessPoolExecutor to run the processing in parallel
