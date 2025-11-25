@@ -17,7 +17,7 @@ def calculate_distance(row):
     # Calculate and return the distance
     return geodesic(point_previous, point_current).meters
 
-def get_df_distance(df,lat_field='latitude',lon_field='longitude',out_field = 'alongtrack_test'):
+def get_df_distance(df,lat_field='latitude',lon_field='longitude',out_field = 'alongtrack'):
     df = df.rename(columns={lat_field:'_lat',lon_field:'_lon'})
     df['lat_prev'] = df['_lat'].shift(1)
     df['lon_prev'] = df['_lon'].shift(1)

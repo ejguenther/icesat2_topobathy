@@ -8,11 +8,38 @@ Created on Fri May 23 08:37:49 2025
 
 import numpy as np
 import h5py
-from typing import List
 import pandas as pd
-from typing import List, Union
+from typing import Union
 from . import readers
+import scipy
 
+
+def calculate_distance(row):
+    # Handle the first row (which has no previous point)
+    if pd.isna(row['lat_prev']):
+        return 0.0
+    
+    # Create the coordinate tuples geopy expects
+    point_current = (row['_lat'], row['_lon'])
+    point_previous = (row['lat_prev'], row['lon_prev'])
+    
+    # Calculate and return the distance
+    return geodesic(point_previous, point_current).meters
+
+def get_df_distance(df,lat_field='latitude',lon_field='longitude',out_field = 'alongtrack'):
+    df = df.rename(columns={lat_field:'_lat',lon_field:'_lon'})
+    df['lat_prev'] = df['_lat'].shift(1)
+    df['lon_prev'] = df['_lon'].shift(1)
+    df['distance_meters'] = df.apply(calculate_distance, axis=1)
+    df = df.drop(columns=['lat_prev', 'lon_prev'])
+    df = df.rename(columns={'_lat':lat_field,'_lon':lon_field})
+    return df
+
+def interpolate_domain(atl08_at, atl08_domain, key_df_at, kind_type):
+    intep_func = scipy.interpolate.interp1d(atl08_at, atl08_domain, kind=kind_type, 
+                              fill_value='extrapolate')
+    interp_domain = intep_func(key_df_at)
+    return interp_domain
 
 def is_member(elements_to_check, reference_elements, comparison_mode='normal'):
     """
