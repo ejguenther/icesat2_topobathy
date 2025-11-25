@@ -141,19 +141,31 @@ def create_gdf_las_extent(las_list, num_processes=None):
     return wgs_extent
 
 if __name__ == "__main__":
-    #laz_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/NorthCarolina/phase5'
+    # laz_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/NorthCarolina/phase5'
+    # laz_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/OpenData/NorthCarolina/phase5'
+    # laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/vault/Finland/UTM_WKT'
+    # laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/vault/Finland/UTM_WKT'
+    # laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/vault/Finland/UTM_WKT'
+    # laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/CA_UpperSouthAmerica_Eldorado_2019'
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/CA_UpperSouthAmerica_Eldorado_2019'
+    laz_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/OpenData/Finland/'
+
     #laz_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/CA_SanJoaquin'
     # laz_dir = '/home/ejg2736/data/als_test_area'
     # laz_dir = '/mnt/bigtex/vol1/Data/Labeled_PointClouds/Lidar/Alexandria'
     # laz_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/Finland/UTM'
     # laz_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/Finland/unprocessed'
     # laz_dir = '/exports/nfs_share/Data/OpenData/florida_2019_west_everglades'
-    laz_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/OpenData/florida_2019_west_everglades'
-    out_file = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
+    # laz_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/OpenData/florida_2019_west_everglades'
+    # out_file = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
+    # out_file = '/home/ejg2736/dev/crossover_analysis/nc_phase5_laz_extent.gpkg'
+    out_file = '/home/ejg2736/dev/crossover_analysis/finland_wkt_laz_extent_walker.gpkg'
+    # out_file = '/home/ejg2736/dev/crossover_analysis/CA_UpperSouthAmerica_Eldorado_2019.gpkg'
+
     laz_list = find_files(laz_dir, 'laz')
     # laz_list = laz_list[0:1]
     # extent_gdf = create_gdf_las_extent(laz_list,num_processes=18)
-    extent_gdf = create_gdf_las_extent(laz_list,num_processes=1)
+    extent_gdf = create_gdf_las_extent(laz_list,num_processes=8)
 
     extent_gdf.to_file(out_file, driver='GPKG', layer='layer')     
     

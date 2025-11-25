@@ -131,6 +131,20 @@ def plot_alongtrack_als(df_als,title):
     plt.show()
     
     
+    
+def plot_alongtrack_atl08_als(alongtrack,h_ph,atl08_class,title):
+    plt.figure()
+    plt.plot(alongtrack[atl08_class == 0],h_ph[atl08_class == 0],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    plt.plot(alongtrack[atl08_class == 3],h_ph[atl08_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    plt.plot(alongtrack[atl08_class == 2],h_ph[atl08_class == 2],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    plt.plot(alongtrack[atl08_class == 1],h_ph[atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    plt.xlabel('Alongtrack (m)')
+    plt.ylabel('Orthometric Height (m)')
+    plt.legend(markerscale=3)
+    plt.title(title)
+    plt.show()
+    
+    
 def plot_alongtrack_atl_als(df_ph, df_als,title):
     plt.figure()
     # plt.plot(df_als.alongtrack[df_als.classification == 7],df_als.ortho_h[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
@@ -138,7 +152,7 @@ def plot_alongtrack_atl_als(df_ph, df_als,title):
     plt.plot(df_als.alongtrack[df_als.classification == 1],df_als.ortho_h[df_als.classification == 1],'.',color=[0.8, 0.8, 0.8],label='ALS Unclassified (Veg)')
     plt.plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.ortho_h[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
     
-    # plt.plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.ortho_h[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    plt.plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.ortho_h[df_ph.combined_class == 0],'.',color=[0.8,0.8,1],label='Unclassified')
     # plt.plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
     plt.plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.ortho_h[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='ATL08 Canopy')
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.ortho_h[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
@@ -194,6 +208,38 @@ def plot_alongtrack_atl_als_dual(df_ph, df_als,title):
     
     plt.show()
     
+    
+def plot_alongtrack_atl08_als_dual(df_ph1, df_ph2, df_als,title):
+    fig, axes = plt.subplots(2, 1, sharex=True, sharey=True)
+    # axes[0].plot(df_als.alongtrack[df_als.classification == 7],df_als.ellip_h[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
+    # axes[0].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.ellip_h[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[0].plot(df_als.alongtrack[df_als.classification == 1],df_als.ellip_h[df_als.classification == 1],'.',color=[0.9, 0.9, 0.9],label='ALS Unclassified')
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([3,4,5])],df_als.ellip_h[df_als.classification.isin([3,4,5])],'.',color=[0.7, 0.7, 0.7],label='ALS Canopy')
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.ellip_h[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Terrain')
+    axes[0].plot(df_ph1.alongtrack[df_ph1.atl08_class == 0],df_ph1.h_ph[df_ph1.atl08_class == 0],'.',color=[0.0,0.9,0.9],alpha = 0.2,label='ATL08 Unclassified')
+    axes[0].plot(df_ph1.alongtrack[df_ph1.atl08_class == 3],df_ph1.h_ph[df_ph1.atl08_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='ATL08 Top of Canopy')
+    axes[0].plot(df_ph1.alongtrack[df_ph1.atl08_class.isin([2])],df_ph1.h_ph[df_ph1.atl08_class.isin([2])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='ATL08 Canopy')
+    axes[0].plot(df_ph1.alongtrack[df_ph1.atl08_class == 1],df_ph1.h_ph[df_ph1.atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
+    axes[0].set_ylabel('Height (m)')
+    axes[0].legend(markerscale=3)
+    axes[0].set_title('ATL08 REL006')
+        
+    axes[1].plot(df_als.alongtrack[df_als.classification == 1],df_als.ellip_h[df_als.classification == 1],'.',color=[0.9, 0.9, 0.9],label='ALS Unclassified')
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([3,4,5])],df_als.ellip_h[df_als.classification.isin([3,4,5])],'.',color=[0.7, 0.7, 0.7],label='ALS Canopy')
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.ellip_h[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Terrain')
+    axes[1].plot(df_ph2.alongtrack[df_ph2.atl08_class == 0],df_ph2.h_ph[df_ph2.atl08_class == 0],'.',color=[0.0,0.9,0.9],alpha = 0.2, label='ATL08 Unclassified')
+    axes[1].plot(df_ph2.alongtrack[df_ph2.atl08_class == 3],df_ph2.h_ph[df_ph2.atl08_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='ATL08 Top of Canopy')
+    axes[1].plot(df_ph2.alongtrack[df_ph2.atl08_class.isin([2])],df_ph2.h_ph[df_ph2.atl08_class.isin([2])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='ATL08 Canopy')
+    axes[1].plot(df_ph2.alongtrack[df_ph2.atl08_class == 1],df_ph2.h_ph[df_ph2.atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
+    
+    axes[1].set_xlabel('Alongtrack (m)')
+    axes[1].set_ylabel('Height (m)')
+    # axes[1].legend(markerscale=3)
+    axes[1].set_title('ATL08 REL007')
+    
+    fig.suptitle(title, fontsize=16)
+    
+    plt.show()        
     
 def plot_alongtrack_atl_als_tri(df_ph, df_als,title):
     fig, axes = plt.subplots(2, 1, sharex=True, sharey=True)
@@ -336,4 +382,100 @@ def plot_with_secondary_axis2(df_als):
     ax2.set_xlabel('Corresponding Longitude (Decimal Degrees)')
     
     fig.tight_layout()
+    plt.show()
+    
+    
+    
+def plot_alongtrack_atl_als_alongtrack_versions(df_ph, df_als,title):
+    fig, axes = plt.subplots(4, 1, sharex=True, sharey=True)
+
+    
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.h_norm[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[0].plot(df_als.alongtrack[df_als.classification == 1],df_als.h_norm[df_als.classification == 1],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.h_norm[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.h_norm[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.9],label='Unclassified (0)')
+    # axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.h_norm[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.h_norm[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.h_norm[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.h_norm[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    axes[0].set_xlabel('Alongtrack (m)')
+    axes[0].set_ylabel('Orthometric Height (m)')
+    axes[0].legend(markerscale=3)
+    axes[0].set_title('h_norm')
+    
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.h_norm[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[1].plot(df_als.alongtrack[df_als.classification == 1],df_als.h_norm[df_als.classification == 1],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.h_norm[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.h_te_norm[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.9],label='Unclassified (0)')
+    # axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.h_te_norm[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.h_te_norm[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.h_te_norm[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.h_te_norm[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    axes[1].set_xlabel('Alongtrack (m)')
+    axes[1].set_ylabel('Orthometric Height (m)')
+    axes[1].legend(markerscale=3)
+    axes[1].set_title('h_te_norm')
+    
+    axes[2].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.h_norm[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[2].plot(df_als.alongtrack[df_als.classification == 1],df_als.h_norm[df_als.classification == 1],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    axes[2].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.h_norm[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    axes[2].plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.h_toposurf_norm[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.9],label='Unclassified')
+    # axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    axes[2].plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.h_toposurf_norm[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    axes[2].plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.h_toposurf_norm[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    axes[2].plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.h_toposurf_norm[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    axes[2].plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.h_toposurf_norm[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    axes[2].set_xlabel('Alongtrack (m)')
+    axes[2].set_ylabel('Orthometric Height (m)')
+    axes[2].legend(markerscale=3)
+    axes[2].set_title('h_toposurf_norm')
+    
+    fig.suptitle(title, fontsize=16)
+    
+    plt.show()
+    
+    
+    
+def plot_alongtrack_atl_als_alongtrack_versions2(df_ph, df_als,title):
+    fig, axes = plt.subplots(2, 1, sharex=True, sharey=True)
+
+    
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.h_norm[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[0].plot(df_als.alongtrack[df_als.classification == 1],df_als.h_norm[df_als.classification == 1],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    axes[0].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.h_norm[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.h_norm[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.9],label='Unclassified (0)')
+    # axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.h_norm[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.h_norm[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.h_norm[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    axes[0].plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.h_norm[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    axes[0].set_xlabel('Alongtrack (m)')
+    axes[0].set_ylabel('Relative Height (m)')
+    axes[0].legend(markerscale=3)
+    axes[0].set_title('Terrain Normalized')
+    
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.h_norm[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    axes[1].plot(df_als.alongtrack[df_als.classification == 1],df_als.h_norm[df_als.classification == 1],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    axes[1].plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.h_norm[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 0],df_ph.h_topobathy_norm[df_ph.combined_class == 0],'.',color=[0.8,0.8,0.9],label='Unclassified (0)')
+    # axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class.isin([2,3])],df_ph.h_topobathy_norm[df_ph.combined_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.h_topobathy_norm[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.h_topobathy_norm[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='Water Surface (41)')
+    axes[1].plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.h_topobathy_norm[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='Bathymetry (40)')
+    axes[1].set_xlabel('Alongtrack (m)')
+    axes[1].set_ylabel('Relative Height (m)')
+    axes[1].legend(markerscale=3)
+    axes[1].set_title('Topobathy Normalized')
+    
+    
+    fig.suptitle(title, fontsize=16)
+    
     plt.show()

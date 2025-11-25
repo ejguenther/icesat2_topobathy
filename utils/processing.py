@@ -190,7 +190,7 @@ def get_atl08_mapping(ph_index_beg, segment_id,
 
     # Initialize an array to hold all ATL03 photon classifications.
     # It's pre-populated with -1 to indicate unclassified photons.
-    all_photons_classified = (np.zeros(max_output_size + 1, dtype=int))
+    all_photons_classified = (np.zeros(max_output_size + 1, dtype=float))
 
     # Populate the `all_photons_classified` array with the ATL08 classifications
     # at the calculated `new_mapping_indices`.

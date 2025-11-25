@@ -191,7 +191,7 @@ def geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile):
     for polygon, filename, file_crs in results:
         if polygon:
             geometries.append(polygon)
-            filenames.append(filename)
+            filenames.append(os.path.join(folder_path,filename))
             if crs is None and file_crs is not None:
               crs = file_crs
 
@@ -199,9 +199,9 @@ def geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile):
         print("No valid geometries were created.")
         return
 
-    gdf = gpd.GeoDataFrame({'filename': filenames, 'geometry': geometries}, crs=crs)
+    gdf = gpd.GeoDataFrame({'file_name': filenames, 'geometry': geometries}, crs=crs)
 
-    gdf.to_file(output_shapefile)
+    gdf.to_file(output_shapefile, driver='GPKG')
     print(f"Shapefile created: {output_shapefile}")
 
 def get_als_from_target(wgs_extent, target_lon, target_lat, region = None):
@@ -409,8 +409,12 @@ if __name__ == "__main__":
     # print(t2-t1)
     
     # Example usage:
-    folder_path = "/home/ejg2736/Desktop/Bigtex/exports/vol2/vol2/Data/OpenData/Finland/UTM_DTM"  # Replace with your folder path
-    output_shapefile = "geotif_extents.shp"  # Replace with your desired output path
+    # folder_path = "/home/ejg2736/Desktop/Bigtex/exports/vol2/vol2/Data/OpenData/Finland/UTM_DTM"  # Replace with your folder path
+    # output_shapefile = "geotif_extents.shp"  # Replace with your desired output path
+    # output_shapefile = "geotif_extents.gpkg"  # Replace with your desired output path
+    
+    folder_path = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/Global/fabdem/zip_tiles'
+    output_shapefile = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/Global/fabdem/fabdem_tile_extents3.gpkg'
 
     geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile)
     

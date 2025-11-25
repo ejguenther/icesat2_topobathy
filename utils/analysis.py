@@ -17,6 +17,20 @@ def get_max98(series):
         max98 = np.nan
     return max98
 
+def get_len(series):
+    try:
+        length = len(series)
+    except:
+        length = 0
+    return length
+
+def get_len_unique(series):
+    try:
+        length = len(np.unique(series))
+    except:
+        length = 0
+    return length
+
 def _percentile_post(arr, percent):
     pos = (len(arr) - 1) * (percent/100)
 
@@ -101,6 +115,23 @@ def aggregate_segment_metrics(
             .groupby(key_field)
             .agg(
                  **{outfield: pd.NamedAgg(column=field, aggfunc=get_max98)}
+            )
+        )
+    elif operation == 'get_len':
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=get_len)}
+            )
+        )
+        
+    elif operation == 'get_len_unique':
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=get_len)}
             )
         )
     

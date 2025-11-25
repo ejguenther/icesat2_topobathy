@@ -15,7 +15,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 from pathlib import Path
 from utils.geographic_utils import find_utm_zone_epsg, get_geoid_height
-from utils.datum_transforms import convert_wgs84_to_nad83_manual
+from utils.datum_transforms import convert_3d_nad83_to_wgs84
 from utils.create_las_swath import create_als_swath
 
 from pyproj import Transformer
@@ -226,6 +226,7 @@ def get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt):
     lat_ph = np.array(f[gt + '/heights/lat_ph'])
     h_ph = np.array(f[gt + '/heights/h_ph'])
     quality_ph = np.array(f[gt + '/heights/quality_ph'])
+    delta_time = np.array(f[gt + '/heights/delta_time'])
     
     # Read ATL03 segment rate at ATL03 photon rate
     solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
@@ -240,6 +241,7 @@ def get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt):
     # Read ATL24 photon rate at ATL03 photon rate
     atl24_class_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt)
     atl24_ortho_h_ph = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt,'/ortho_h')
+    atl24_conf = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt,'/confidence')
     
     # Combine ATL08 and ATL4 classifications
     combined_class_ph = processing.combine_atl08_and_atl24_classifications(atl08_class_ph,atl24_class_ph)
@@ -259,10 +261,12 @@ def get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt):
                 "ortho_h": atl24_ortho_h_ph,
                 "atl08_class":atl08_class_ph,
                 "atl24_class":atl24_class_ph,
+                "atl24_conf":atl24_conf,
                 "combined_class":combined_class_ph,
                 "contested_class":contested_class_ph,
                 "solar_elevation":solar_elevation,
-                "quality_ph":quality_ph
+                "quality_ph":quality_ph,
+                "delta_time":delta_time
             }
         )
     
@@ -328,6 +332,17 @@ def get_atl_at_seg(df_ph, res = 20, min_at = None):
         class_id = [2,3],
         outfield = 'h_canopy'
     )
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'h_norm',
+        operation = 'max',
+        class_field = 'atl08_class',
+        class_id = [2,3],
+        outfield = 'h_canopy_max'
+    )
+
 
     if 'h_topobathy_norm' in df_ph.columns: 
         # Calculate h_canopy, 98th percentile canopy height relative to ground
@@ -338,6 +353,75 @@ def get_atl_at_seg(df_ph, res = 20, min_at = None):
             class_field = 'atl08_class',
             class_id = [2,3],
             outfield = 'h_canopy_tb'
+        )
+        
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_topobathy_norm',
+            operation = 'max',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_tb_max'
+        )
+    
+    if 'h_toposurf_norm' in df_ph.columns: 
+        # Calculate h_canopy, 98th percentile canopy height relative to ground
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_toposurf_norm',
+            operation = 'get_max98',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_ts'
+        )
+        
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_toposurf_norm',
+            operation = 'max',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_ts_max'
+        )
+    
+    if 'h_te_norm' in df_ph.columns: 
+        # Calculate h_canopy, 98th percentile canopy height relative to ground
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_te_norm',
+            operation = 'get_max98',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_te'
+        )
+        
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_te_norm',
+            operation = 'max',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_te_max'
+        )
+        
+    if 'h_surf_norm' in df_ph.columns: 
+        # Calculate h_canopy, 98th percentile canopy height relative to ground
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_surf_norm',
+            operation = 'get_max98',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_sf'
+        )
+        
+        df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+            key_field = 'key_id',
+            field = 'h_surf_norm',
+            operation = 'max',
+            class_field = 'atl08_class',
+            class_id = [2,3],
+            outfield = 'h_canopy_sf_max'
         )
     
     # Calculate h_canopy_abs, 98th percentile canopy height (orthometric)
@@ -379,6 +463,66 @@ def get_atl_at_seg(df_ph, res = 20, min_at = None):
         class_field = 'atl24_class',
         class_id = [41],
         outfield = 'h_surface'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'atl08_class',
+        class_id = [1],
+        outfield = 'n_terrain'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'atl08_class',
+        class_id = [2,3],
+        outfield = 'n_canopy'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'atl24_class',
+        class_id = [40],
+        outfield = 'n_bathy'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'atl24_class',
+        class_id = [41],
+        outfield = 'n_surf'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'atl08_class',
+        class_id = [0],
+        outfield = 'n_unclass_atl08'
+    )
+    
+    # Calculate h_surface, the median sea surface (orthometric)
+    df_seg = analysis.aggregate_segment_metrics(df_ph, df_seg, 
+        key_field = 'key_id',
+        field = 'delta_time',
+        operation = 'get_len_unique',
+        class_field = 'atl08_class',
+        class_id = [0,1,2,3],
+        outfield = 'n_shots'
     )
     
     # Filter NaN data
@@ -489,7 +633,7 @@ def get_als_at_seg(als_swath, res = 20, min_at = None, height = 'ellip_h'):
         field = 'ortho_h',
         operation = 'get_max98',
         class_field = 'classification',
-        class_id = [1],
+        class_id = [3,4,5],
         outfield = 'als_unclassed_max98'
     )
     
@@ -499,7 +643,7 @@ def get_als_at_seg(als_swath, res = 20, min_at = None, height = 'ellip_h'):
         field = 'h_norm',
         operation = 'get_max98',
         class_field = 'classification',
-        class_id = [1],
+        class_id = [3,4,5],
         outfield = 'als_norm_veg_max98'
     )
     
@@ -509,10 +653,60 @@ def get_als_at_seg(als_swath, res = 20, min_at = None, height = 'ellip_h'):
         field = 'h_topobathy_norm',
         operation = 'get_max98',
         class_field = 'classification',
-        class_id = [1],
+        class_id = [3,4,5],
         outfield = 'als_tb_norm_veg_max98'
     )
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'classification',
+        class_id = [3,4,5],
+        outfield = 'als_n_unclass'
+    )
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'classification',
+        class_id = [3,4,5],
+        outfield = 'als_n_terrain'
+    )
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'classification',
+        class_id = [2],
+        outfield = 'als_n_terrain'
+    )
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'classification',
+        class_id = [40],
+        outfield = 'als_n_bathy'
+    )
         
+    
+    # Calculate h_canopy, 98th percentile canopy height relative to ground
+    df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
+        key_field = 'key_id',
+        field = 'ortho_h',
+        operation = 'get_len',
+        class_field = 'classification',
+        class_id = [41],
+        outfield = 'als_n_surf'
+    )
     
     # # Calculate h_canopy_abs, 98th percentile canopy height (orthometric)
     # df_seg = analysis.aggregate_segment_metrics(als_swath, df_seg, 
@@ -610,30 +804,44 @@ def find_corresponding_atl(source_filename, target_dir):
     # If the loop finishes without finding a match, return None
     return None
 
+
+def get_atl08(atl08_file, gt):
+    f = h5py.File(atl08_file, 'r') 
+    
+    # Read photon rate ATL03 data
+    lon_ph = np.array(f[gt + '/heights/lon_ph'])
+    lat_ph = np.array(f[gt + '/heights/lat_ph'])
+    h_ph = np.array(f[gt + '/heights/h_ph'])
+    quality_ph = np.array(f[gt + '/heights/quality_ph'])
+    delta_time = np.array(f[gt + '/heights/delta_time'])
+    
+    # Read ATL03 segment rate at ATL03 photon rate
+    solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
+    alongtrack = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/segment_dist_x')
+    alongtrack = alongtrack + np.array(f[gt + '/heights/dist_ph_along'])
     
 
 
 if __name__ == "__main__":
     
-    # Define ATL03 File
-    atl03_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ICESat-2/REL006/florida_aoi/atl03'
-
+    Define ATL03 File
+    atl03_dir = '/Data/ICESat-2/REL006/florida_aoi/atl03'
     # atl03_name = 'ATL03_20200212094736_07280607_006_01.h5'
-    # atl03_file = os.path.join(atl03_dir, atl03_name)
+    atl03_file = os.path.join(atl03_dir, atl03_name)
     
-    # # Define ATL08 File
-    atl08_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ICESat-2/REL006/florida_aoi/atl08'
+    # Define ATL08 File
+    atl08_dir = '/Data/ICESat-2/REL006/florida_aoi/atl08'
     # atl08_name = 'ATL08_20200212094736_07280607_006_01.h5'
-    # atl08_file = os.path.join(atl08_dir, atl08_name)
+    atl08_file = os.path.join(atl08_dir, atl08_name)
     
-    # # Define ATL24 file
-    atl24_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ICESat-2/REL006/florida_aoi/atl24'
+    # Define ATL24 file
+    atl24_dir = '/Data/ICESat-2/REL006/florida_aoi/atl24'
     # atl24_name = 'ATL24_20200212094736_07280607_006_01_001_01.h5'
-    # atl24_file = os.path.join(atl24_dir, atl24_name)
+    atl24_file = os.path.join(atl24_dir, atl24_name)
     
-    target_res = 20
+    target_res = 30
     
-    # # Define Granule
+    # Define Granule
     # gt = 'gt3r'
     
     atl24_list = os.listdir(atl24_dir)
@@ -651,156 +859,196 @@ if __name__ == "__main__":
     gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
     
     for i in range(0,len(atl24_filelist)):
+        print(i)
         for gt in gt_list:
-        # try:
-            atl03_file = atl03_filelist[i]
-            atl08_file = atl08_filelist[i]
-            atl24_file = atl24_filelist[i]
+            try:
+                atl03_file = atl03_filelist[i]
+                atl08_file = atl08_filelist[i]
+                atl24_file = atl24_filelist[i]
+    
+            
+                file_out_name = f"{Path(atl03_file).stem}_{gt}"
+                
+                # Get photon rate DF
+                df_ph = get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt)
+                
+                df_ph.loc[(df_ph['atl24_class'] == 40) & (df_ph['atl24_conf'] > 0.6),'atl24_class'] = 0
+                
+                
+                
+                # atl24_class[(df_ph['atl24_class'] == 40) & (df_ph['atl24_conf'] < 0.6)] = 0
 
-        
-            file_out_name = f"{Path(atl03_file).stem}_{gt}"
-            
-            # Get photon rate DF
-            df_ph = get_atl_at_photon_rate(atl03_file, atl08_file, atl24_file, gt)
-            
-            # Aggregate photon rate DF to 10 m segment 
-            df_seg = get_atl_at_seg(df_ph, res = target_res)
-            
-            # Write out as geopandas dataframe
-            geometry_seg = [Point(xy) for xy in zip(df_seg.longitude, df_seg.latitude)]
-            gdf_seg = gpd.GeoDataFrame(df_seg, geometry=geometry_seg, crs="EPSG:4326")
-            
-            # Save geopandas dataframe
-            gdf_seg.to_file("is2_topobathy_" + gt + "_test.gpkg", layer='atl08atl24', driver="GPKG")
-            
-            
-            # Read las extent
-            extent_gpkg = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
-            extent_gdf = gpd.read_file(extent_gpkg)
-            
-            # Trim Data
-            df_ph = filter_df_by_extent(df_ph, extent_gdf.total_bounds)
-            
-            if len(df_ph) == 0:
-                print('No data in extent')
-                continue
-            
-            # Calculate norm height for topobathy
-            df_ph['h_topobathy_norm'] = analysis.normalize_heights(df_ph, class_field = 'combined_class', 
-                              ground_class = [1,40], 
-                              ground_res = 5, 
-                              target_height = 'h_ph')
-            
-            # Apply EGM2008
-            geoid_file = '/home/ejg2736/dev/geoid/BundleAll/egm08_1.gtx'
-            geoid_offset = get_geoid_height(np.array(df_ph.longitude), np.array(df_ph.latitude), geoid_file)
-            df_ph['ortho_h'] = df_ph.h_ph - geoid_offset
-            
-            # Aggregate photon rate DF to 10 m segment 
-            df_seg = get_atl_at_seg(df_ph, res = target_res)
-            
-            # Find best UTM zone
-            utm_epsg = find_utm_zone_epsg(extent_gdf.iloc[0].lat_min,extent_gdf.iloc[0].lon_min)
-            extent_gdf = extent_gdf.to_crs(utm_epsg) # Convert extent to UTM
-            
-            # Read ALS tile
-            # If file already exists, skip processing
-            als_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/als'
-            als_outfile = os.path.join(als_outdir, 'als_' + file_out_name + '.pqt')
-            
-            if os.path.exists(als_outfile):
-                als_swath = pd.read_parquet(als_outfile)
-                als_swath = als_swath.drop('key_id', axis=1)
+
+
                 
-            else:
-        
-                als_swath = create_als_swath(extent_gdf, df_seg)
+                df_ph.atl08_class = df_ph.atl08_class.astype(int)
+                # Aggregate photon rate DF to 10 m segment 
+                df_seg = get_atl_at_seg(df_ph, res = target_res)
+                
+                # Write out as geopandas dataframe
+                geometry_seg = [Point(xy) for xy in zip(df_seg.longitude, df_seg.latitude)]
+                gdf_seg = gpd.GeoDataFrame(df_seg, geometry=geometry_seg, crs="EPSG:4326")
+                
+                # Save geopandas dataframe
+                gdf_seg.to_file("is2_topobathy_" + gt + "_test.gpkg", layer='atl08atl24', driver="GPKG")
+                
+                
+                # Read las extent
+                extent_gpkg = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
+                extent_gdf = gpd.read_file(extent_gpkg)
+                
+                # Trim Data
+                df_ph = filter_df_by_extent(df_ph, extent_gdf.total_bounds)
+                
+                if len(df_ph) == 0:
+                    print('No data in extent')
+                    continue
                 
                 # Calculate norm height for topobathy
-                als_swath['h_topobathy_norm'] = analysis.normalize_heights(als_swath, class_field = 'classification', 
-                                  ground_class = [2,40], 
-                                  ground_res = 1, 
-                                  target_height = 'z')
+                df_ph['h_topobathy_norm'] = analysis.normalize_heights(df_ph, class_field = 'combined_class', 
+                                  ground_class = [1,40], 
+                                  ground_res = 5, 
+                                  target_height = 'h_ph')
                 
                 # Calculate norm height for topobathy
-                als_swath['h_norm'] = analysis.normalize_heights(als_swath, class_field = 'classification', 
-                                  ground_class = [2], 
-                                  ground_res = 1, 
-                                  target_height = 'z')
+                df_ph['h_toposurf_norm'] = analysis.normalize_heights(df_ph, class_field = 'combined_class', 
+                                  ground_class = [1,41], 
+                                  ground_res = 5, 
+                                  target_height = 'h_ph')
                 
-                # Calculate Ellipsoid Height
-                geoid_file = '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2012b.tif'
+                # Calculate norm height for topobathy
+                df_ph['h_surf_norm'] = analysis.normalize_heights(df_ph, class_field = 'combined_class', 
+                                  ground_class = [41], 
+                                  ground_res = 5, 
+                                  target_height = 'h_ph')
                 
-                transformer = Transformer.from_crs(int(utm_epsg[5:]),4326)
-                als_lat, als_lon  =transformer.transform(als_swath.x, als_swath.y)
-                geoid_offset = get_geoid_height(als_lon + 360, als_lat, geoid_file)
-                als_swath['ellip_h'] = als_swath.z + geoid_offset
-                als_swath['latitude'] = als_lat
-                als_swath['longitude'] = als_lon
-                
-                _,_,als_swath.ellip_h = convert_wgs84_to_nad83_manual(als_lon, als_lat, als_swath.ellip_h)
-                # test = test - 1.618700000000004
-                
+                # Calculate norm height for topobathy
+                df_ph['h_te_norm'] = analysis.normalize_heights(df_ph, class_field = 'atl08_class', 
+                                  ground_class = [1], 
+                                  ground_res = 5, 
+                                  target_height = 'h_ph')
                 
                 # Apply EGM2008
-                geoid_file = '/home/ejg2736/dev/geoid/BundleAll/egm08_1.gtx'
-                geoid_offset = get_geoid_height(als_lon, als_lat, geoid_file)
-                als_swath['ortho_h'] = als_swath.ellip_h - geoid_offset
+                geoid_file = '/dev/geoid/BundleAll/egm08_1.gtx'
+                geoid_offset = get_geoid_height(np.array(df_ph.longitude), np.array(df_ph.latitude), geoid_file)
+                df_ph['ortho_h'] = df_ph.h_ph - geoid_offset
+                
+                # Aggregate photon rate DF to 10 m segment 
+                df_seg = get_atl_at_seg(df_ph, res = target_res)
+                
+                # Find best UTM zone
+                utm_epsg = find_utm_zone_epsg(extent_gdf.iloc[0].lat_min,extent_gdf.iloc[0].lon_min)
+                extent_gdf = extent_gdf.to_crs(utm_epsg) # Convert extent to UTM
+                
+                # Read ALS tile
+                # If file already exists, skip processing
+                als_outdir = '/Data/workspace/IS2/mangrove_fl/als'
+                als_outfile = os.path.join(als_outdir, 'als_' + file_out_name + '.pqt')
+                
+                if os.path.exists(als_outfile):
+                    als_swath = pd.read_parquet(als_outfile)
+                    als_swath = als_swath.drop('key_id', axis=1)
+                    
+                else:
             
-            
-            als_seg = get_als_at_seg(als_swath, res = target_res, min_at = np.min(df_ph.alongtrack))
-            
-            #Write als_seg
-            
-            # Drop als_seg.alongtrack
-            als_seg_modified = als_seg.drop(columns=['alongtrack'])
-            
-            merged_df = pd.merge(df_seg, als_seg_modified, on='key_id', how='left')
-            
-            # Append information
-            atl_info = get_attribute_info(atl03_file,gt)
-            merged_df['atl03_file'] = os.path.basename(atl03_file)
-            merged_df['gt'] = gt
-            merged_df['atlas_beam_type'] = atl_info['atlas_beam_type']
-            merged_df['atlas_spot_number'] = atl_info['atlas_spot_number']
-            merged_df['year'] = atl_info['year']
-            merged_df['doy'] = atl_info['doy']
-            
-            # Write out ATL_df
-            alt_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/atl'
-            alt_outfile = os.path.join(alt_outdir, 'atl08atl24_' + file_out_name + '.pqt')
-            df_ph.to_parquet(alt_outfile)
-            
-            # Write out ALS_df
-            als_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/als'
-            als_outfile = os.path.join(als_outdir, 'als_' + file_out_name + '.pqt')
-            als_swath.to_parquet(als_outfile)
-            
-            # Write out merged_df
-            merged_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/merged'
-            merged_outfile = os.path.join(merged_outdir, 'merged20m_' + file_out_name + '.pqt')
-            merged_df.to_parquet(merged_outfile)
-            
-            
-            # Write out merged_csv
-            mergedcsv_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/merged_csv'
-            merged_outfilecsv = os.path.join(merged_outdir, 'merged20m_' + file_out_name + '.csv')
-            merged_df.to_csv(merged_outfilecsv)
-            
-            # Write out merged_gdf
-            
-            geometry = gpd.points_from_xy(merged_df['longitude'], merged_df['latitude'])
-            merged_gdf = gpd.GeoDataFrame(merged_df, geometry=geometry, crs="EPSG:4326")
-            
-            mergedgdf_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/merged_gdf'
-            mergedgdf_outfile = os.path.join(mergedgdf_outdir, 'merged20m_' + file_out_name + '.gpkg')
-            merged_gdf.to_file(mergedgdf_outfile,driver="GPKG")
-        # except:
-        #     print('***')
-        #     print(atl03_filelist[i])
-        #     print(gt)
-        #     print('Fail')
-        #     print('***')
+                    als_swath = create_als_swath(extent_gdf, df_seg)
+                    
+                    if len(als_swath) == 0:
+                        print('No data ALS in extent')
+                        continue
+    
+                    
+                    # Calculate norm height for topobathy
+                    als_swath['h_topobathy_norm'] = analysis.normalize_heights(als_swath, class_field = 'classification', 
+                                      ground_class = [2,40], 
+                                      ground_res = 1, 
+                                      target_height = 'z')
+                    
+                    # Calculate norm height for topobathy
+                    als_swath['h_norm'] = analysis.normalize_heights(als_swath, class_field = 'classification', 
+                                      ground_class = [2, 41], 
+                                      ground_res = 1, 
+                                      target_height = 'z')
+                                        
+                    # Calculate Ellipsoid Height
+                    geoid_file = '/dev/geoid/agisoft/us_noaa_g2012b.tif'
+                    
+                    transformer = Transformer.from_crs(int(utm_epsg[5:]),4326)
+                    als_lat, als_lon  =transformer.transform(als_swath.x, als_swath.y)
+                    geoid_offset = get_geoid_height(als_lon + 360, als_lat, geoid_file)
+                    als_swath['ellip_h'] = als_swath.z + geoid_offset
+                    als_swath['latitude'] = als_lat
+                    als_swath['longitude'] = als_lon
+                    
+                    _,_,als_swath.ellip_h = convert_3d_nad83_to_wgs84(als_lon, als_lat, als_swath.ellip_h)
+                    # test = test - 1.618700000000004
+                    
+                    
+                    # Apply EGM2008
+                    geoid_file = '/dev/geoid/BundleAll/egm08_1.gtx'
+                    geoid_offset = get_geoid_height(als_lon, als_lat, geoid_file)
+                    als_swath['ortho_h'] = als_swath.ellip_h - geoid_offset
+                
+                
+                # als_swath.loc[(als_swath['classification'] == 1)  & (als_swath['h_norm'] > 0.1),'classification'] = 3
+                als_swath.loc[(als_swath['classification'] == 1),'classification'] = 3
+
+                als_seg = get_als_at_seg(als_swath, res = target_res, min_at = np.min(df_ph.alongtrack))
+                
+                #Write als_seg
+                
+                # Drop als_seg.alongtrack
+                als_seg_modified = als_seg.drop(columns=['alongtrack'])
+                
+                als_seg_modified['als_comp_flag'].fillna('', inplace=True)
+                # als_seg_modified['als_comp_flag'] = als_seg_modified['als_comp_flag'].astype(str)
+                
+                merged_df = pd.merge(df_seg, als_seg_modified, on='key_id', how='left')
+                merged_df['als_comp_flag'].fillna('na', inplace=True)
+                # Append information
+                atl_info = get_attribute_info(atl03_file,gt)
+                merged_df['atl03_file'] = os.path.basename(atl03_file)
+                merged_df['gt'] = gt
+                merged_df['atlas_beam_type'] = atl_info['atlas_beam_type']
+                merged_df['atlas_spot_number'] = atl_info['atlas_spot_number']
+                merged_df['year'] = atl_info['year']
+                merged_df['doy'] = atl_info['doy']
+                
+                # Write out ATL_df
+                alt_outdir = '/nfs_share/Data/workspace/IS2/mangrove_fl/atl'
+                alt_outfile = os.path.join(alt_outdir, 'atl08atl24_' + file_out_name + '.pqt')
+                df_ph.to_parquet(alt_outfile)
+                
+                # Write out ALS_df
+                als_outdir = '/nfs_share/Data/workspace/IS2/mangrove_fl/als'
+                als_outfile = os.path.join(als_outdir, 'als_' + file_out_name + '.pqt')
+                als_swath.to_parquet(als_outfile)
+                
+                # Write out merged_df
+                merged_outdir = '/nfs_share/Data/workspace/IS2/mangrove_fl/merged'
+                merged_outfile = os.path.join(merged_outdir, 'merged' + str(target_res) + 'm_' + file_out_name + '.pqt')
+                merged_df.to_parquet(merged_outfile)
+                
+                
+                # Write out merged_csv
+                mergedcsv_outdir = '/nfs_share/Data/workspace/IS2/mangrove_fl/merged_csv'
+                merged_outfilecsv = os.path.join(merged_outdir, 'merged' + str(target_res) + 'm_' + file_out_name + '.csv')
+                merged_df.to_csv(merged_outfilecsv)
+                
+                # Write out merged_gdf
+                
+                geometry = gpd.points_from_xy(merged_df['longitude'], merged_df['latitude'])
+                merged_gdf = gpd.GeoDataFrame(merged_df, geometry=geometry, crs="EPSG:4326")
+                
+                mergedgdf_outdir = '/nfs_share/Data/workspace/IS2/mangrove_fl/merged_gdf'
+                mergedgdf_outfile = os.path.join(mergedgdf_outdir, 'merged30m_' + file_out_name + '.gpkg')
+                merged_gdf.to_file(mergedgdf_outfile,driver="GPKG")
+            except:
+                print('***')
+                print(atl03_filelist[i])
+                print(gt)
+                print('Fail')
+                print('***')
 
 
                 

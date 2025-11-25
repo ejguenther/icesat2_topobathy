@@ -8,9 +8,9 @@ Created on Fri Aug  1 15:16:35 2025
 
 import numpy as np
 
-def convert_wgs84_to_nad83_manual(lon, lat, height):
+def convert_3d_nad83_to_wgs84(lon, lat, height):
     """
-    Converts WGS84 to NAD83 by manually implementing the 7-parameter Helmert transformation.
+    Converts NAD83 to WGS84 by manually implementing the 7-parameter Helmert transformation.
     This demonstrates the underlying mathematics of a datum shift.
 
     Args:
@@ -62,9 +62,9 @@ def convert_wgs84_to_nad83_manual(lon, lat, height):
     return np.degrees(lon_nad_rad), np.degrees(lat_nad_rad), height_nad
 
 
-def convert_nad83_to_wgs84_manual(lon, lat, height):
+def convert_3d_wgs84_to_nad83(lon, lat, height):
     """
-    Converts NAD83 to WGS84 by manually implementing the inverse 7-parameter Helmert transformation.
+    Converts WGS84 to NAD83 by manually implementing the inverse 7-parameter Helmert transformation.
     This demonstrates the underlying mathematics of a datum shift.
 
     Args:
@@ -115,9 +115,13 @@ def convert_nad83_to_wgs84_manual(lon, lat, height):
     return np.degrees(lon_wgs_rad), np.degrees(lat_wgs_rad), height_wgs
 
 if __name__ == "__main__":
-    lon = -80.61936094726622
-    lat = 25.179820370629987
-    height = 0
+    # lon = -80.61936094726622
+    # lat = 25.179820370629987
+    # height = 0
+
+    lon = -97.739477
+    lat = 30.324182
+    height = 100
     
-    nad83_lon, nad83_lat, nad83_height = convert_nad83_to_wgs84_manual(lon, lat, height)
-    wgs84_lon, wgs84_lat, wgs84_height = convert_wgs84_to_nad83_manual(lon, lat, height)
+    nad83_lon, nad83_lat, nad83_height = convert_3d_wgs84_to_nad83(lon, lat, height)
+    wgs84_lon, wgs84_lat, wgs84_height = convert_3d_nad83_to_wgs84(lon, lat, height)
