@@ -22,7 +22,6 @@ from utils.datum_transforms import convert_3d_nad83_to_wgs84
 from utils.create_las_swath import create_als_swath
 
 # --- Configuration: ATL08/24 Aggregation Recipe ---
-# This replaces the hardcoded get_atl_at_seg function
 ATL_AGG_CONFIG = [
     # Geolocation (Median of all valid signal classes)
     {'field': 'latitude', 'operation': 'median', 'class_field': 'atl08_class', 'class_id': [1,2,3,40,41], 'outfield': 'latitude'},
@@ -51,7 +50,6 @@ ATL_AGG_CONFIG = [
 ]
 
 # --- Configuration: ALS Aggregation Recipe ---
-# This replaces the hardcoded get_als_at_seg function
 ALS_AGG_CONFIG = [
     # Geometry
     {'field': 'x', 'operation': 'median', 'class_field': 'classification', 'class_id': list(range(1,100)), 'outfield': 'x_als'},
@@ -70,16 +68,16 @@ ALS_AGG_CONFIG = [
 if __name__ == "__main__":
     
     # 1. Setup (Ideally load this from a config file)
-    base_dir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ICESat-2/REL006/florida_aoi'
+    base_dir = '/Data/ICESat-2/REL006/florida_aoi'
     atl03_dir = os.path.join(base_dir, 'atl03')
     atl08_dir = os.path.join(base_dir, 'atl08')
     atl24_dir = os.path.join(base_dir, 'atl24')
     
-    extent_gpkg = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
-    geoid_file = '/home/ejg2736/dev/geoid/BundleAll/egm08_1.gtx'
-    als_geoid_file = '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2012b.tif'
-    als_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/als'
-    df_outdir = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/'
+    extent_gpkg = '/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
+    geoid_file = '/dev/geoid/BundleAll/egm08_1.gtx'
+    als_geoid_file = '/dev/geoid/agisoft/us_noaa_g2012b.tif'
+    als_outdir = '/Data/workspace/IS2/mangrove_fl/als'
+    df_outdir = '/Data/workspace/IS2/mangrove_fl/'
    
     target_res = 30
     gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
