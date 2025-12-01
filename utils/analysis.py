@@ -176,3 +176,43 @@ def normalize_heights(df, class_field = 'classification',
     norm_height = np.array(df[target_height]) - np.array(ground)
     
     return norm_height
+
+def aggregate_by_segment(df, config_list, res=20, min_at=None):
+    """
+    Generic function to aggregate a DataFrame into segments based on a configuration list.
+    """
+    # 1. Calculate Segment Keys (Common to all)
+    if min_at is None:
+        min_at = np.min(df.alongtrack)
+        
+    # Create segment ID based on resolution
+    key = np.floor((df.alongtrack - min_at) / res).astype(int)
+    df['key_id'] = key
+    
+    # Initialize Segment DataFrame
+    df_seg = pd.DataFrame({'key_id': np.unique(key)})
+    df_seg['alongtrack'] = ((np.unique(key) * res) + min_at) + (res / 2)
+
+    # 2. Iterate through the configuration list
+    for cfg in config_list:
+        # Optional: Skip if the source column doesn't exist (e.g., h_topobathy_norm)
+        if 'field' in cfg and cfg['field'] not in df.columns:
+            continue
+            
+        # Call your existing single-metric aggregator
+        df_seg = aggregate_segment_metrics(
+            df, 
+            df_seg, 
+            key_field='key_id',
+            field=cfg['field'],
+            operation=cfg['operation'],
+            class_field=cfg['class_field'],
+            class_id=cfg['class_id'],
+            outfield=cfg['outfield']
+        )
+
+    # 3. Standard Cleanup (can be customized if needed)
+    if 'longitude' in df_seg.columns:
+        df_seg.dropna(subset=['longitude', 'latitude'], inplace=True)
+
+    return df_seg

@@ -13,27 +13,14 @@ from typing import Union
 from . import readers
 import scipy
 
-
-def calculate_distance(row):
-    # Handle the first row (which has no previous point)
-    if pd.isna(row['lat_prev']):
-        return 0.0
+def filter_df_by_extent(df, extent):
+    minx, miny, maxx, maxy = extent
+    filtered_df = df[
+    (df['longitude'] >= minx) & (df['longitude'] <= maxx) &
+    (df['latitude'] >= miny) & (df['latitude'] <= maxy)
+    ]
     
-    # Create the coordinate tuples geopy expects
-    point_current = (row['_lat'], row['_lon'])
-    point_previous = (row['lat_prev'], row['lon_prev'])
-    
-    # Calculate and return the distance
-    return geodesic(point_previous, point_current).meters
-
-def get_df_distance(df,lat_field='latitude',lon_field='longitude',out_field = 'alongtrack'):
-    df = df.rename(columns={lat_field:'_lat',lon_field:'_lon'})
-    df['lat_prev'] = df['_lat'].shift(1)
-    df['lon_prev'] = df['_lon'].shift(1)
-    df['distance_meters'] = df.apply(calculate_distance, axis=1)
-    df = df.drop(columns=['lat_prev', 'lon_prev'])
-    df = df.rename(columns={'_lat':lat_field,'_lon':lon_field})
-    return df
+    return filtered_df
 
 def interpolate_domain(atl08_at, atl08_domain, key_df_at, kind_type):
     intep_func = scipy.interpolate.interp1d(atl08_at, atl08_domain, kind=kind_type, 
