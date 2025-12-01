@@ -11,7 +11,7 @@ import numpy as np
 import h5py
 from . import processing
 import pandas as pd
-from geographic_utils import get_df_distance
+from utils.geographic_utils import get_df_distance
 
 def __appendGlobalList(name):
     if name:
@@ -349,6 +349,7 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         
         # Read ATL03 segment rate at ATL03 photon rate
         solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
+        solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
         alongtrack = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/segment_dist_x')
         alongtrack = alongtrack + np.array(f[gt + '/heights/dist_ph_along'])
 
@@ -368,7 +369,7 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
     if atl08_file:
         atl08_class = processing.get_atl08_class_to_atl03(atl03_file, atl08_file, gt)
         atl08_norm = processing.get_atl08_norm_h_to_atl03(atl03_file, atl08_file, gt)
-        data_dict["atl08_class"] = atl08_class
+        data_dict["atl08_class"] = atl08_class.astype(int)
         data_dict["h_norm"] = atl08_norm
 
     # Optional: Add ATL24
