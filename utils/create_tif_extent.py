@@ -428,6 +428,12 @@ if __name__ == "__main__":
     folder_path = '/home/ejg2736/dev/SBD_tools/ca_comp_tiles_2019_v2'
     output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_2019.gpkg'
 
+
+    folder_path = '/mnt/spindrive_data/maine_20m/dtm'
+    output_shapefile = '/mnt/spindrive_data/maine_20m/maine_dtm_extent.gpkg'
+
+    folder_path = '/mnt/spindrive_data/california_20m/dtm'
+    output_shapefile = '/mnt/spindrive_data/california_20m/ca_dtm_extent.gpkg'
     
     geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile)
     

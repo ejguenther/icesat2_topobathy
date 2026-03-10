@@ -161,6 +161,17 @@ if __name__ == "__main__":
     # out_file = '/home/ejg2736/dev/crossover_analysis/nc_phase5_laz_extent.gpkg'
     out_file = '/home/ejg2736/dev/crossover_analysis/finland_wkt_laz_extent_walker.gpkg'
     # out_file = '/home/ejg2736/dev/crossover_analysis/CA_UpperSouthAmerica_Eldorado_2019.gpkg'
+    
+    laz_dir = '/home/ejg2736/data/austin_tx_lidar/files/'
+    out_file = '/home/ejg2736/data/austin_tx_lidar/extent_file.gpkg'
+
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/Maine/ME_SouthCoastal'
+    out_file = '/home/ejg2736/dev/atl18_gridding/ME_SouthCoastal_extent.gpkg'
+    
+    
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/Texas/Bexar_Travis_Counties_2021'
+    out_file = '/home/ejg2736/dev/crossover_analysis/bexar_travis_laz_bigtex.gpkg'
+
 
     laz_list = find_files(laz_dir, 'laz')
     # laz_list = laz_list[0:1]

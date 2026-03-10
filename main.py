@@ -76,6 +76,7 @@ if __name__ == "__main__":
     extent_gpkg = '/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
     geoid_file = '/dev/geoid/BundleAll/egm08_1.gtx'
     als_geoid_file = '/dev/geoid/agisoft/us_noaa_g2012b.tif'
+    als_geoid_file = '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif'
     als_outdir = '/Data/workspace/IS2/mangrove_fl/als'
     df_outdir = '/Data/workspace/IS2/mangrove_fl/'
    

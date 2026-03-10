@@ -8,7 +8,6 @@ Created on Fri Aug  1 12:36:17 2025
 
 import pandas as pd
 import numpy as np
-import geopandas as gpd
 import laspy
 import shapely
 from shapely.geometry import LineString
@@ -16,23 +15,48 @@ from pyproj import Transformer
 from matplotlib.path import Path
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
+from tqdm import tqdm
 import os
 
-from utils.geographic_utils import find_utm_zone_epsg
+from utils.geographic_utils import find_utm_zone_epsg, get_geoid_height
+from utils.datum_transforms import convert_3d_nad83_to_wgs84
+from utils.analysis import normalize_heights
 
 
 # Constants for the analysis
 DECIMATION = 10         # Downsample lidar points by this factor
 ICESAT2BUFFER = 100    # Buffer around ICESat-2 gt to find ALS tiles
-CROSSTRACK_LIMIT = 5.5  # Final crosstrack distance filter in meters
+CROSSTRACK_LIMIT = 25  # Final crosstrack distance filter in meters
 BBOX_BUFFER = 150      # Buffer around the trimmed line for coarse filtering
 
-def prepare_icesat2_track(df_seg, utm_epsg, skip_rate=1):
+
+def downsample_by_distance(df, resolution_m=50, dist_col='alongtrack'):
+    """
+    Downsamples a dataframe by grouping points into spatial bins based on 
+    along-track distance. Returns one point per 'resolution_m' segment.
+    """
+    # Create a bin ID for every row based on integer division of distance
+    # e.g., 102m // 50 = bin 2
+    bin_ids = (df[dist_col] // resolution_m).astype(int)
+    
+    # Drop duplicates based on this bin ID, keeping the first point in each bin
+    # This is much faster than a full groupby().first()
+    return df.loc[~bin_ids.duplicated()]
+
+def prepare_icesat2_track(df_seg, utm_epsg, resolution_m=None):
     """Prepares the ICESat-2 ground track data by creating a projected LineString."""
+    
+    # Simplify Data if resolution is requested
+    if resolution_m is not None:
+        # Check if we actually have enough data to warrant simplification
+        if len(df_seg) > 100: 
+             df_seg_ds = downsample_by_distance(df_seg, resolution_m=resolution_m)
+        
+             
     # Extract data, skipping points for performance if needed
-    lon = df_seg['longitude'][::skip_rate].values
-    lat = df_seg['latitude'][::skip_rate].values
-    at_dist = df_seg['alongtrack'][::skip_rate].values
+    lon = df_seg_ds['longitude'].values
+    lat = df_seg_ds['latitude'].values
+    at_dist = df_seg_ds['alongtrack'].values
     
     # Project latitude and longitude to the specified UTM zone
     transformer = Transformer.from_crs("EPSG:4326", utm_epsg, always_xy=True)
@@ -76,7 +100,6 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
         # file_name = tile_info.file_name
         # tile_geom = tile_info.geometry.buffer(100)
         base_name = os.path.basename(file_name)
-        print(f"Processing tile: {base_name}")
         
         # 1. Read and project lidar data
         las = laspy.read(file_name)
@@ -170,7 +193,7 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
     extent_gdf = extent_gdf.to_crs(utm_epsg) # Convert extent to UTM
     
     # Prepare the ICESat-2 track once
-    is2_line, is2_x, is2_y, is2_at = prepare_icesat2_track(df_seg, utm_epsg)
+    is2_line, is2_x, is2_y, is2_at = prepare_icesat2_track(df_seg, utm_epsg, resolution_m=50)
 
     # Spatially select lidar tiles that intersect the ground track
     intersecting_tiles = extent_gdf[extent_gdf.intersects(is2_line.buffer(ICESAT2BUFFER))]
@@ -179,10 +202,13 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
     tiles_to_process = list(zip(intersecting_tiles['file_name'], intersecting_tiles['geometry']))
 
     df_list = []
-    if num_workers == 1:
-        for i in range(0,len(tiles_to_process)):
-            df_tile_list = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg)
+    if num_workers <= 1:
+        print("Processing [1 worker]")
+        for i in tqdm(range(len(tiles_to_process)), desc="Processing Tiles:"):
+            df_tile = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg)
             
+            if not df_tile.empty:
+                df_list.append(df_tile)            
         
     else:
         # Use a ProcessPoolExecutor to run the processing in parallel
@@ -198,7 +224,9 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
             # executor.map applies the worker function to each item in the list
             results = executor.map(worker_func, tiles_to_process)
-            for df_tile in results:
+            # for df_tile in results:
+            print(f"Processing [{num_workers} workers]")
+            for df_tile in tqdm(results, total=len(tiles_to_process), desc=f"Processing Tiles:"):
                 if not df_tile.empty:
                     df_list.append(df_tile)
 
@@ -207,3 +235,93 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
         
     # Concatenate results from all processed tiles into a single DataFrame
     return pd.concat(df_list, ignore_index=True)
+
+def generate_and_process_als_swath(
+    extent_gdf, 
+    df_seg, 
+    utm_epsg, 
+    source_geoid_file=None,
+    target_geoid_file=None, 
+    input_units='meters', 
+    source_datum='nad83'
+):
+    """
+    Generates an ALS swath, normalizes heights, and transforms vertical datums 
+    to a standard WGS84/EGM2008 reference.
+
+    Args:
+        extent_gdf (GeoDataFrame): Extent for the swath creation.
+        df_seg (DataFrame): Segmented ICESat-2 data (reference track).
+        utm_epsg (str): EPSG code for the local projection (e.g., 'EPSG:32617').
+        source_geoid_file (str): Path to local geoid model (e.g., Geoid12B) to get to Ellipsoid.
+        target_geoid_file (str): Path to global geoid model (e.g., EGM2008) to get to Orthometric.
+        input_units (str): 'meters' or 'feet'. Converts input 'z' to meters if 'feet'.
+        source_datum (str): 'nad83' or 'wgs84'. If 'nad83', triggers conversion.
+
+    Returns:
+        pd.DataFrame: Processed ALS swath or None if empty.
+    """
+    
+    # Create Swath
+    als_swath = create_als_swath(extent_gdf, df_seg)
+    
+    if len(als_swath) == 0:
+        return None
+
+    # Standardize Units (Feet -> Meters)
+    # It is critical to do this before normalization so relative heights are in meters
+    if input_units == 'feet':
+        als_swath['z'] = als_swath['z'] * 0.3048
+
+    # Normalize Heights (Relative to ground/water)
+    # Note: Logic assumes 'z' is now in meters
+    if 40 in np.unique(als_swath.classification):
+        als_swath['h_topobathy_norm'] = normalize_heights( 
+            als_swath, class_field='classification', ground_class=[2, 40], target_height='z'
+        )
+    als_swath['h_norm'] = normalize_heights(
+        als_swath, class_field='classification', ground_class=[2, 41], target_height='z'
+    )
+
+    # Coordinate Transformation (XY -> Lat/Lon)
+    # Extracts EPSG code safely (handles "EPSG:1234" vs "1234")
+    epsg_code = int(str(utm_epsg).split(':')[-1])
+    transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
+    
+    als_lon, als_lat = transformer.transform(als_swath.x.values, als_swath.y.values)
+    als_swath['latitude'] = als_lat
+    als_swath['longitude'] = als_lon
+
+    # Vertical Datum Pipeline
+    # A. Orthometric (Source) -> Ellipsoid (Source)
+    if source_geoid_file is not None:
+        # We use +360 for longitude here as some geoid readers require 0-360 range
+        source_geoid_offset = get_geoid_height(als_lon + 360, als_lat, source_geoid_file)
+        als_swath['ellip_h'] = als_swath.z + source_geoid_offset
+    else:
+        als_swath['ellip_h'] = als_swath.z
+
+    # B. Datum Shift: Ellipsoid (NAD83) -> Ellipsoid (WGS84)
+    if source_datum.lower() == 'nad83':
+        _, _, als_swath['ellip_h'] = convert_3d_nad83_to_wgs84(
+            als_lon, als_lat, als_swath['ellip_h']
+        )
+    
+    # C. Ellipsoid (WGS84) -> Orthometric (Target/EGM2008)
+    if target_geoid_file is not None:
+        target_geoid_offset = get_geoid_height(als_lon, als_lat, target_geoid_file)
+        als_swath['ortho_h'] = als_swath.ellip_h - target_geoid_offset
+
+    # Reassign all veg class 4 points as veg class 3
+    if 4 in als_swath.classification:
+        als_swath.loc[(als_swath['classification'] == 4), 'classification'] = 3
+
+    # Reassign all veg class 5 points as veg class 3
+    if 5 in als_swath.classification:
+        als_swath.loc[(als_swath['classification'] == 4), 'classification'] = 5
+
+    # Reassign unclassified to vegetation only if ground is labeled
+    if 2 in als_swath.classification & (not any(x in [3,4,5] for x in als_swath.classification)):
+        als_swath.loc[(als_swath['classification'] == 1), 'classification'] = 3
+
+    return als_swath
