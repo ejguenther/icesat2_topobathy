@@ -18,8 +18,8 @@ from functools import partial
 from tqdm import tqdm
 import os
 
-from utils.geographic_utils import find_utm_zone_epsg, get_geoid_height
-from utils.datum_transforms import convert_3d_nad83_to_wgs84
+from utils.geographic_utils import find_utm_zone_epsg
+from utils.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
 from utils.analysis import normalize_heights
 
 
@@ -236,7 +236,72 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 4):
     # Concatenate results from all processed tiles into a single DataFrame
     return pd.concat(df_list, ignore_index=True)
 
-def generate_and_process_als_swath(
+
+def transform_als_swath(als_swath, 
+    utm_epsg, 
+    source_geoid_file=None,
+    target_geoid_file=None, 
+    input_units='meters', 
+    source_datum='nad83'):
+
+    # Standardize Units (Feet -> Meters)
+    # It is critical to do this before normalization so relative heights are in meters
+    if input_units == 'feet':
+        als_swath['z'] = als_swath['z'] * 0.3048
+
+    # Normalize Heights (Relative to ground/water)
+    # Note: Logic assumes 'z' is now in meters
+    if 40 in np.unique(als_swath.classification):
+        als_swath['h_topobathy_norm'] = normalize_heights( 
+            als_swath, class_field='classification', ground_class=[2, 40], target_height='z'
+        )
+    als_swath['h_norm'] = normalize_heights(
+        als_swath, class_field='classification', ground_class=[2, 41], target_height='z'
+    )
+
+    # Coordinate Transformation (XY -> Lat/Lon)
+    # Extracts EPSG code safely (handles "EPSG:1234" vs "1234")
+    epsg_code = int(str(utm_epsg).split(':')[-1])
+    transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
+    
+    als_lon, als_lat = transformer.transform(als_swath.x.values, als_swath.y.values)
+    als_swath['latitude'] = als_lat
+    als_swath['longitude'] = als_lon
+
+    # Vertical Datum Pipeline
+    # A. Orthometric (Source) -> Ellipsoid (Source)
+    if source_geoid_file is not None:
+        source_geoid_offset = get_geoid_height(als_lon, als_lat, source_geoid_file)
+        als_swath['ellip_h'] = als_swath.z + source_geoid_offset
+    else:
+        als_swath['ellip_h'] = als_swath.z
+
+    # B. Datum Shift: Ellipsoid (NAD83) -> Ellipsoid (WGS84)
+    if source_datum.lower() == 'nad83':
+        _, _, als_swath['ellip_h'] = convert_3d_nad83_to_wgs84(
+            als_lon, als_lat, als_swath['ellip_h']
+        )
+    
+    # C. Ellipsoid (WGS84) -> Orthometric (Target/EGM2008)
+    if target_geoid_file is not None:
+        target_geoid_offset = get_geoid_height(als_lon, als_lat, target_geoid_file)
+        als_swath['ortho_h'] = als_swath.ellip_h - target_geoid_offset
+
+    # Reassign all veg class 4 points as veg class 3
+    if (als_swath['classification'] == 4).any():
+        als_swath.loc[als_swath['classification'] == 4, 'classification'] = 3
+
+    # Reassign all veg class 5 points as veg class 3
+    if (als_swath['classification'] == 5).any():
+        als_swath.loc[als_swath['classification'] == 5, 'classification'] = 3
+
+    # Reassign unclassified to vegetation only if ground is labeled
+    if (als_swath['classification'] == 2).any() and not als_swath['classification'].isin([3, 4, 5]).any():
+        als_swath.loc[als_swath['classification'] == 1, 'classification'] = 3
+
+    return als_swath
+
+def get_als_swath_and_transform(
     extent_gdf, 
     df_seg, 
     utm_epsg, 
@@ -268,60 +333,12 @@ def generate_and_process_als_swath(
     if len(als_swath) == 0:
         return None
 
-    # Standardize Units (Feet -> Meters)
-    # It is critical to do this before normalization so relative heights are in meters
-    if input_units == 'feet':
-        als_swath['z'] = als_swath['z'] * 0.3048
+    als_swath = transform_als_swath(als_swath, 
+    utm_epsg, 
+    source_geoid_file,
+    target_geoid_file, 
+    input_units, 
+    source_datum)
 
-    # Normalize Heights (Relative to ground/water)
-    # Note: Logic assumes 'z' is now in meters
-    if 40 in np.unique(als_swath.classification):
-        als_swath['h_topobathy_norm'] = normalize_heights( 
-            als_swath, class_field='classification', ground_class=[2, 40], target_height='z'
-        )
-    als_swath['h_norm'] = normalize_heights(
-        als_swath, class_field='classification', ground_class=[2, 41], target_height='z'
-    )
-
-    # Coordinate Transformation (XY -> Lat/Lon)
-    # Extracts EPSG code safely (handles "EPSG:1234" vs "1234")
-    epsg_code = int(str(utm_epsg).split(':')[-1])
-    transformer = Transformer.from_crs(epsg_code, 4326, always_xy=True)
     
-    als_lon, als_lat = transformer.transform(als_swath.x.values, als_swath.y.values)
-    als_swath['latitude'] = als_lat
-    als_swath['longitude'] = als_lon
-
-    # Vertical Datum Pipeline
-    # A. Orthometric (Source) -> Ellipsoid (Source)
-    if source_geoid_file is not None:
-        # We use +360 for longitude here as some geoid readers require 0-360 range
-        source_geoid_offset = get_geoid_height(als_lon + 360, als_lat, source_geoid_file)
-        als_swath['ellip_h'] = als_swath.z + source_geoid_offset
-    else:
-        als_swath['ellip_h'] = als_swath.z
-
-    # B. Datum Shift: Ellipsoid (NAD83) -> Ellipsoid (WGS84)
-    if source_datum.lower() == 'nad83':
-        _, _, als_swath['ellip_h'] = convert_3d_nad83_to_wgs84(
-            als_lon, als_lat, als_swath['ellip_h']
-        )
-    
-    # C. Ellipsoid (WGS84) -> Orthometric (Target/EGM2008)
-    if target_geoid_file is not None:
-        target_geoid_offset = get_geoid_height(als_lon, als_lat, target_geoid_file)
-        als_swath['ortho_h'] = als_swath.ellip_h - target_geoid_offset
-
-    # Reassign all veg class 4 points as veg class 3
-    if 4 in als_swath.classification:
-        als_swath.loc[(als_swath['classification'] == 4), 'classification'] = 3
-
-    # Reassign all veg class 5 points as veg class 3
-    if 5 in als_swath.classification:
-        als_swath.loc[(als_swath['classification'] == 4), 'classification'] = 5
-
-    # Reassign unclassified to vegetation only if ground is labeled
-    if 2 in als_swath.classification & (not any(x in [3,4,5] for x in als_swath.classification)):
-        als_swath.loc[(als_swath['classification'] == 1), 'classification'] = 3
-
     return als_swath

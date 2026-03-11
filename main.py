@@ -17,9 +17,12 @@ from pyproj import Transformer
 # Assuming you moved t2t, get_attribute_info, etc. to utils.helpers
 from utils import processing, analysis, readers
 from utils.metadata import get_attribute_info, find_corresponding_atl
-from utils.geographic_utils import find_utm_zone_epsg, get_geoid_height
-from utils.datum_transforms import convert_3d_nad83_to_wgs84
+from utils.geographic_utils import find_utm_zone_epsg
+from utils.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
 from utils.create_las_swath import create_als_swath
+
+import yaml
+import argparse
 
 # --- Configuration: ATL08/24 Aggregation Recipe ---
 ATL_AGG_CONFIG = [
@@ -67,21 +70,38 @@ ALS_AGG_CONFIG = [
 
 if __name__ == "__main__":
     
-    # 1. Setup (Ideally load this from a config file)
-    base_dir = '/Data/ICESat-2/REL006/florida_aoi'
+    parser = argparse.ArgumentParser(description="Process ICESat-2 Topobathy Data")
+    parser.add_argument('--config', type=str, help="Path to YAML configuration file")
+    parser.add_argument('--base_dir', type=str, help="Base directory for ATL inputs")
+    parser.add_argument('--extent_gpkg', type=str, help="Path to extent GPKG")
+    parser.add_argument('--geoid_file', type=str, help="Path to geoid GTX file")
+    parser.add_argument('--als_geoid_file', type=str, help="Path to ALS geoid TIF file")
+    parser.add_argument('--als_outdir', type=str, help="Output directory for ALS swaths")
+    parser.add_argument('--df_outdir', type=str, help="Output directory for merged dataframes")
+    parser.add_argument('--target_res', type=int, help="Target resolution for aggregation")
+    parser.add_argument('--gt_list', nargs='+', help="List of ground tracks to process")
+
+    args = parser.parse_args()
+
+    config = {}
+    if args.config:
+        with open(args.config, 'r') as file:
+            config = yaml.safe_load(file)
+
+    # 1. Setup (Override YAML config with CLI args if provided)
+    base_dir = args.base_dir or config.get('base_dir', '/Data/ICESat-2/REL006/florida_aoi')
     atl03_dir = os.path.join(base_dir, 'atl03')
     atl08_dir = os.path.join(base_dir, 'atl08')
     atl24_dir = os.path.join(base_dir, 'atl24')
     
-    extent_gpkg = '/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
-    geoid_file = '/dev/geoid/BundleAll/egm08_1.gtx'
-    als_geoid_file = '/dev/geoid/agisoft/us_noaa_g2012b.tif'
-    als_geoid_file = '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif'
-    als_outdir = '/Data/workspace/IS2/mangrove_fl/als'
-    df_outdir = '/Data/workspace/IS2/mangrove_fl/'
+    extent_gpkg = args.extent_gpkg or config.get('extent_gpkg', '/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg')
+    geoid_file = args.geoid_file or config.get('geoid_file', '/dev/geoid/BundleAll/egm08_1.gtx')
+    als_geoid_file = args.als_geoid_file or config.get('als_geoid_file', '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif')
+    als_outdir = args.als_outdir or config.get('als_outdir', '/Data/workspace/IS2/mangrove_fl/als')
+    df_outdir = args.df_outdir or config.get('df_outdir', '/Data/workspace/IS2/mangrove_fl/')
    
-    target_res = 30
-    gt_list = ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l']
+    target_res = args.target_res or config.get('target_res', 30)
+    gt_list = args.gt_list or config.get('gt_list', ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l'])
 
     # 2. File Discovery
     atl24_list = os.listdir(atl24_dir)

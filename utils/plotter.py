@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_alongtrack(alongtrack,h_ph,combined_class_ph,title):
+    decimate = 2
     plt.figure()
-    plt.plot(alongtrack[combined_class_ph == 0][::100],h_ph[combined_class_ph == 0][::100],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    plt.plot(alongtrack[combined_class_ph == 0][::decimate],h_ph[combined_class_ph == 0][::decimate],'.',color=[0.8,0.8,0.8],label='Unclassified')
     plt.plot(alongtrack[combined_class_ph == 3],h_ph[combined_class_ph == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
     plt.plot(alongtrack[combined_class_ph == 2],h_ph[combined_class_ph == 2],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
     plt.plot(alongtrack[combined_class_ph == 1],h_ph[combined_class_ph == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
@@ -221,6 +222,25 @@ def plot_alongtrack_atl_als2(df_ph, df_als,title):
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.ortho_h[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.ortho_h[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='ATL24 Water Surface')
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.ortho_h[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='ATL24 Bathymetry')
+    plt.xlabel('Alongtrack (m)')
+    plt.ylabel('Orthometric Height (m)')
+    plt.legend(markerscale=3)
+    plt.title(title)
+    plt.show()
+
+def plot_alongtrack_atl_als3(df_ph, df_als,title):
+    plt.figure()
+    # plt.plot(df_als.alongtrack[df_als.classification == 7],df_als.ortho_h[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.ellip_h[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([1,3,4,5])],df_als.ellip_h[df_als.classification.isin([1,3,4,5])],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.ellip_h[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 0],df_ph.h_ph[df_ph.atl08_class == 0],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    # plt.plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class.isin([2,3])],df_ph.h_ph[df_ph.atl08_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='ATL08 Canopy')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 1],df_ph.h_ph[df_ph.atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 41],df_ph.h_ph[df_ph.atl08_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='ATL24 Water Surface')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 40],df_ph.h_ph[df_ph.atl08_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='ATL24 Bathymetry')
     plt.xlabel('Alongtrack (m)')
     plt.ylabel('Orthometric Height (m)')
     plt.legend(markerscale=3)
