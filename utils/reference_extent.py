@@ -427,6 +427,11 @@ if __name__ == "__main__":
 
     folder_path = '/home/ejg2736/dev/SBD_tools/ca_comp_tiles_2019_v2'
     output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_2019.gpkg'
+    
+    folder_path = '/mnt/spindrive_data/finland_20m/chm_98/'
+    output_shapefile = '/mnt/spindrive_data/finland_20m/finland_chm_98_extent.gpkg'
+    
+
 
     
     geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile)

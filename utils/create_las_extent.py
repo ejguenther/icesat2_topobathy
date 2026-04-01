@@ -172,11 +172,21 @@ if __name__ == "__main__":
     laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/Texas/Bexar_Travis_Counties_2021'
     out_file = '/home/ejg2736/dev/crossover_analysis/bexar_travis_laz_bigtex.gpkg'
 
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/Latvia'
+    out_file = '/home/ejg2736/dev/atl18_gridding/lativa_extent.gpkg'
 
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/vault/Finland/UTM'
+    out_file = '/home/ejg2736/dev/atl18_gridding/finland_extent.gpkg'
     laz_list = find_files(laz_dir, 'laz')
+    
+    laz_dir = '/home/ejg2736/network_drives/bigtex/exports/vol2/vol2/Data/OpenData/retrievable/NorthCarolina/phase5'
+    out_file = '/home/ejg2736/dev/atl18_gridding/nc_extent.gpkg'
+    laz_list = find_files(laz_dir, 'laz')   
+    
+
     # laz_list = laz_list[0:1]
     # extent_gdf = create_gdf_las_extent(laz_list,num_processes=18)
-    extent_gdf = create_gdf_las_extent(laz_list,num_processes=8)
+    extent_gdf = create_gdf_las_extent(laz_list,num_processes=1)
 
     extent_gdf.to_file(out_file, driver='GPKG', layer='layer')     
     
