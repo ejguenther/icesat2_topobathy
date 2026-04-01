@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def plot_alongtrack(alongtrack,h_ph,combined_class_ph,title):
+    decimate = 2
     plt.figure()
-    plt.plot(alongtrack[combined_class_ph == 0][::100],h_ph[combined_class_ph == 0][::100],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    plt.plot(alongtrack[combined_class_ph == 0][::decimate],h_ph[combined_class_ph == 0][::decimate],'.',color=[0.8,0.8,0.8],label='Unclassified')
     plt.plot(alongtrack[combined_class_ph == 3],h_ph[combined_class_ph == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
     plt.plot(alongtrack[combined_class_ph == 2],h_ph[combined_class_ph == 2],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
     plt.plot(alongtrack[combined_class_ph == 1],h_ph[combined_class_ph == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
@@ -115,6 +116,50 @@ def plot_alongtrack_atl08_atl24_contested(alongtrack,h_ph,atl08_class,atl24_clas
     fig.suptitle(title, fontsize=16)
     plt.show()
     
+
+def plot_alongtrack_atl08_atl24_contested2(alongtrack,h_ph,atl08_class,atl24_class,contested_class,title):
+
+    fig, axes = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(10, 12))
+    
+    # --- Subplot 0 ---
+    axes[0].plot(alongtrack[atl08_class == 0], h_ph[atl08_class == 0], '.', color=[0.8,0.8,0.8], label='Unclassified')
+    axes[0].plot(alongtrack[atl08_class == 3], h_ph[atl08_class == 3], '.', color=[0.20, 0.70, 0.20], label='Top of Canopy (3)')
+    axes[0].plot(alongtrack[atl08_class == 2], h_ph[atl08_class == 2], '.', color=[0.12, 0.42, 0.12], label='Canopy (2)')
+    axes[0].plot(alongtrack[atl08_class == 1], h_ph[atl08_class == 1], '.', color=[0.70, 0.44, 0.24], label='Topography (1)')
+    
+    # CHANGE 1: Add fontsize to labels
+    axes[0].set_ylabel('Orthometric Height (m)', fontsize=14) 
+    axes[0].legend(markerscale=3)
+    axes[0].set_title('ATL08 REL006 Classifications', fontsize=16) # Optional: Increase title size too
+    
+    # --- Subplot 1 ---
+    axes[1].plot(alongtrack[atl24_class == 0], h_ph[atl24_class == 0], '.', color=[0.8,0.8,0.8], label='Unclassified')
+    axes[1].plot(alongtrack[atl24_class == 41], h_ph[atl24_class == 41], '.', color=[0.0, 0.62, 0.77], label='Water Surface (41)')
+    axes[1].plot(alongtrack[atl24_class == 40], h_ph[atl24_class == 40], '.', color=[0.96, 0.82, 0.59], label='Bathymetry (40)')
+    
+    # CHANGE 1: Add fontsize to labels
+    axes[1].set_ylabel('Orthometric Height (m)', fontsize=14)
+    axes[1].legend(markerscale=3)
+    axes[1].set_title('ATL24 REL001 Classifications', fontsize=16)
+    
+    # --- Subplot 2 ---
+    axes[2].plot(alongtrack[contested_class == 0], h_ph[contested_class == 0], '.', color=[0.8,0.8,0.8], label='Unclassified Photon')
+    axes[2].plot(alongtrack[contested_class == 1], h_ph[contested_class == 1], '.', color=[0.12, 0.82, 0.12], label='ATL08 Photon')
+    axes[2].plot(alongtrack[contested_class == 2], h_ph[contested_class == 2], '.', color=[0.0, 0.62, 0.97], label='ATL24 Photon')
+    axes[2].plot(alongtrack[contested_class == 3], h_ph[contested_class == 3], '.', color=[1,0,0], label='Contested Photon')
+    
+    # CHANGE 1: Add fontsize to labels
+    axes[2].set_xlabel('Alongtrack (m)', fontsize=14)
+    axes[2].set_ylabel('Orthometric Height (m)', fontsize=14)
+    axes[2].legend(markerscale=3)
+    axes[2].set_title('Contested Photons', fontsize=16)
+    
+    # CHANGE 2: Loop through all axes to increase tick number size
+    for ax in axes:
+        ax.tick_params(axis='both', which='major', labelsize=12)
+    
+    fig.suptitle(title, fontsize=20) # Increased main title size
+    plt.show()
     
 def plot_alongtrack_als(df_als,title):
     plt.figure()
@@ -177,6 +222,25 @@ def plot_alongtrack_atl_als2(df_ph, df_als,title):
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 1],df_ph.ortho_h[df_ph.combined_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 41],df_ph.ortho_h[df_ph.combined_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='ATL24 Water Surface')
     plt.plot(df_ph.alongtrack[df_ph.combined_class == 40],df_ph.ortho_h[df_ph.combined_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='ATL24 Bathymetry')
+    plt.xlabel('Alongtrack (m)')
+    plt.ylabel('Orthometric Height (m)')
+    plt.legend(markerscale=3)
+    plt.title(title)
+    plt.show()
+
+def plot_alongtrack_atl_als3(df_ph, df_als,title):
+    plt.figure()
+    # plt.plot(df_als.alongtrack[df_als.classification == 7],df_als.ortho_h[df_als.classification == 7],'.',color=[0.8,0,0],label='Noise (7)')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([41,45])],df_als.ellip_h[df_als.classification.isin([41,45])],'.',color=[0.4, 0.4, 0.6],label='ALS Water')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([1,3,4,5])],df_als.ellip_h[df_als.classification.isin([1,3,4,5])],'.',color=[0.7, 0.9, 0.7],label='ALS Unclassified (Veg)')
+    plt.plot(df_als.alongtrack[df_als.classification.isin([2,40])],df_als.ellip_h[df_als.classification.isin([2,40])],'.',color=[0.4, 0.4, 0.4],label='ALS Topobathy')
+    
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 0],df_ph.h_ph[df_ph.atl08_class == 0],'.',color=[0.8,0.8,0.8],label='Unclassified')
+    # plt.plot(df_ph.alongtrack[df_ph.combined_class == 3],df_ph.ortho_h[df_ph.combined_class == 3],'.',color=[0.20392157, 0.70196078, 0.20392157],label='Top of Canopy (3)')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class.isin([2,3])],df_ph.h_ph[df_ph.atl08_class.isin([2,3])],'.',color=[0.12156863, 0.41960784, 0.12156863],label='ATL08 Canopy')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 1],df_ph.h_ph[df_ph.atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='ATL08 Terrain')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 41],df_ph.h_ph[df_ph.atl08_class == 41],'.',color=[0.        , 0.61568627, 0.76862745],label='ATL24 Water Surface')
+    plt.plot(df_ph.alongtrack[df_ph.atl08_class == 40],df_ph.h_ph[df_ph.atl08_class == 40],'.',color=[0.96078431, 0.81960784, 0.59215686],label='ATL24 Bathymetry')
     plt.xlabel('Alongtrack (m)')
     plt.ylabel('Orthometric Height (m)')
     plt.legend(markerscale=3)

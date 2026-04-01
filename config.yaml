@@ -1,0 +1,8 @@
+base_dir: "/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ICESat-2/REL006/florida_aoi"
+extent_gpkg: "/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg"
+geoid_file: "/home/ejg2736/dev/geoid/BundleAll/egm08_1.gtx"
+als_geoid_file: "/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif"
+als_outdir: "/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/als"
+df_outdir: "/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/"
+target_res: 30
+gt_list: ['gt1r', 'gt1l', 'gt2r', 'gt2l', 'gt3r', 'gt3l']
