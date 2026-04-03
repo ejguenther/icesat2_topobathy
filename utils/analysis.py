@@ -31,6 +31,20 @@ def get_len_unique(series):
         length = 0
     return length
 
+def get_mode(series):
+    try:
+        mode = series.mode()[0]
+    except:
+        mode = np.nan
+    return mode
+
+def get_skew(series):
+    try:
+        skew = series.skew()
+    except:
+        skew = np.nan
+    return skew
+
 def _percentile_post(arr, percent):
     pos = (len(arr) - 1) * (percent/100)
 
@@ -47,22 +61,25 @@ def percentile_rh(arr):
     out_list = []    
     try:    
         out_list.append(_percentile_post(arr, 10))
+        out_list.append(_percentile_post(arr, 15))
         out_list.append(_percentile_post(arr, 20))
         out_list.append(_percentile_post(arr, 25))
         out_list.append(_percentile_post(arr, 30))
+        out_list.append(_percentile_post(arr, 35))
         out_list.append(_percentile_post(arr, 40))
+        out_list.append(_percentile_post(arr, 45))
         out_list.append(_percentile_post(arr, 50))
+        out_list.append(_percentile_post(arr, 55))
         out_list.append(_percentile_post(arr, 60))
+        out_list.append(_percentile_post(arr, 65))
         out_list.append(_percentile_post(arr, 70))
         out_list.append(_percentile_post(arr, 75))
         out_list.append(_percentile_post(arr, 80))
+        out_list.append(_percentile_post(arr, 85))
         out_list.append(_percentile_post(arr, 90))
-        out_list.append(_percentile_post(arr, 98))
-        out_list.append(_percentile_post(arr, 100))
+        out_list.append(_percentile_post(arr, 95))
     except:
-        out_list = [np.nan, np.nan,np.nan,np.nan,np.nan,np.nan,
-                                np.nan,np.nan,np.nan,np.nan,np.nan,np.nan,
-                                np.nan]
+        out_list = [np.nan]*18
 
     return out_list
 
@@ -132,6 +149,33 @@ def aggregate_segment_metrics(
             .groupby(key_field)
             .agg(
                  **{outfield: pd.NamedAgg(column=field, aggfunc=get_len)}
+            )
+        )
+
+    elif operation == 'get_skew':
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=get_skew)}
+            )
+        )
+
+    elif operation == 'get_mode':
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=get_mode)}
+            )
+        )
+
+    elif operation == 'percentile_rh':
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=percentile_rh)}
             )
         )
     

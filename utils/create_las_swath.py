@@ -79,6 +79,7 @@ def estimate_signed_crosstrack(points_xy, line):
     cross_product_z = line_vec[0] * point_vecs[:, 1] - line_vec[1] * point_vecs[:, 0]
     return np.sign(cross_product_z) * unsigned_dist
 
+
 def estimate_alongtrack(points_xy, line, line_x, line_y, line_at_dist):
     """Estimates along-track distance by projecting points onto the line."""
     # Project points onto the detailed, vertex-filtered line
