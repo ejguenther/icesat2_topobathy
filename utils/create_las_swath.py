@@ -184,7 +184,7 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
         })
     return df_tile
 
-def create_als_swath(extent_gdf, df_seg, num_workers = 4):
+def create_als_swath(extent_gdf, df_seg, num_workers = 8):
     """
     Generates a swath of lidar points along an ICESat-2 ground track by
     processing lidar tiles in parallel.

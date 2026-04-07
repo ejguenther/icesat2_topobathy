@@ -52,6 +52,45 @@ ATL_AGG_CONFIG = [
     {'field': 'delta_time', 'operation': 'get_len_unique', 'class_field': 'atl08_class', 'class_id': [0,1,2,3], 'outfield': 'n_shots'},
 ]
 
+ATL08_AGG_CONFIG = [
+    # Geolocation (Median of all valid signal classes)
+    {'field': 'latitude', 'operation': 'mean', 'class_field': 'atl08_class', 'class_id': [1,2,3,40,41], 'outfield': 'latitude'},
+    {'field': 'longitude', 'operation': 'mean', 'class_field': 'atl08_class', 'class_id': [1,2,3,40,41], 'outfield': 'longitude'},
+    {'field': 'solar_elevation', 'operation': 'median', 'class_field': 'atl08_class', 'class_id': [1,2,3,40,41], 'outfield': 'solar_elevation'},
+
+    # Terrain
+    {'field': 'h_ph', 'operation': 'mean', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'h_te_mean'},
+    {'field': 'h_ph', 'operation': 'median', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'h_te_median'},
+    {'field': 'h_ph', 'operation': 'std', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'h_te_std'},
+    {'field': 'h_ph', 'operation': 'min', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'h_te_min'},
+    {'field': 'h_ph', 'operation': 'max', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'h_te_max'},
+
+    # Canopy (Using h_norm)
+    {'field': 'h_norm', 'operation': 'get_max98', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy'},
+    {'field': 'h_norm', 'operation': 'max', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_max'},
+    {'field': 'h_norm', 'operation': 'mean', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_mean'},
+    {'field': 'h_norm', 'operation': 'median', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_median'},
+    {'field': 'h_norm', 'operation': 'min', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_min'},
+    {'field': 'h_norm', 'operation': 'max', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_max'},
+    {'field': 'h_norm', 'operation': 'std', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'canopy_openness'},
+    {'field': 'h_norm', 'operation': 'std', 'class_field': 'atl08_class', 'class_id': [3], 'outfield': 'toc_roughness'},
+    {'field': 'h_norm', 'operation': 'percentile_rh', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'canopy_h_metrics'},
+
+     # Canopy ABS (Using h_ph)
+    {'field': 'h_ph', 'operation': 'get_max98', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_abs'},
+    {'field': 'h_ph', 'operation': 'max', 'class_field': 'atl08_class', 'class_id': [2,3], 'outfield': 'h_canopy_max_abs'},
+
+    # Counts
+    {'field': 'h_ph', 'operation': 'get_len', 'class_field': 'atl08_class', 'class_id': [1, 2, 3], 'outfield': 'n_seg_ph'},
+    {'field': 'h_ph', 'operation': 'get_len', 'class_field': 'atl08_class', 'class_id': [1], 'outfield': 'n_te_photons'},
+    {'field': 'h_ph', 'operation': 'get_len', 'class_field': 'atl08_class', 'class_id': [2], 'outfield': 'n_ca_photons'},
+    {'field': 'h_ph', 'operation': 'get_len', 'class_field': 'atl08_class', 'class_id': [3], 'outfield': 'n_toc_photons'},
+
+
+    # Non-stanard Aggregations
+    {'field': 'delta_time', 'operation': 'get_len_unique', 'class_field': 'atl08_class', 'class_id': [0,1,2,3], 'outfield': 'n_shots'},
+]
+
 # --- Configuration: ALS Aggregation Recipe ---
 ALS_AGG_CONFIG = [
     # Geometry

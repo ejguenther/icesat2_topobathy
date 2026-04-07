@@ -347,11 +347,22 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         quality_ph = np.array(f[gt + '/heights/quality_ph'])
         delta_time = np.array(f[gt + '/heights/delta_time'])
         signal_conf_ph0 = np.array(f[gt + '/heights/signal_conf_ph'])[:,0]
+        signal_conf_ph1 = np.array(f[gt + '/heights/signal_conf_ph'])[:,1]
+        signal_conf_ph2 = np.array(f[gt + '/heights/signal_conf_ph'])[:,2]
+        signal_conf_ph3 = np.array(f[gt + '/heights/signal_conf_ph'])[:,3]
+        signal_conf_ph4 = np.array(f[gt + '/heights/signal_conf_ph'])[:,4]
 
 
         # Read ATL03 segment rate at ATL03 photon rate
         solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
-        solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
+        solar_azimuth = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_azimuth')
+        tx_pulse_energy = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/tx_pulse_energy')
+        tx_pulse_skew_est = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/tx_pulse_skew_est')
+        tx_pulse_width_lower = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/tx_pulse_width_lower')
+        tx_pulse_width_upper = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/tx_pulse_width_upper')
+        full_sat_fract = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/full_sat_fract')
+        near_sat_fract = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/near_sat_fract')
+
         alongtrack = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/segment_dist_x')
         alongtrack = alongtrack + np.array(f[gt + '/heights/dist_ph_along'])
 
@@ -364,8 +375,18 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         "delta_time": delta_time,
         "alongtrack": alongtrack,
         "solar_elevation": solar_elevation,
-        "alongtrack": alongtrack,
         "signal_conf_ph0": signal_conf_ph0,
+        "signal_conf_ph1": signal_conf_ph1,
+        "signal_conf_ph2": signal_conf_ph2,
+        "signal_conf_ph3": signal_conf_ph3,
+        "signal_conf_ph4": signal_conf_ph4,
+        "solar_azimuth": solar_azimuth,
+        "tx_pulse_energy": tx_pulse_energy,
+        "tx_pulse_skew_est": tx_pulse_skew_est,
+        "tx_pulse_width_lower": tx_pulse_width_lower,
+        "tx_pulse_width_upper": tx_pulse_width_upper,
+        "full_sat_fract": full_sat_fract,
+        "near_sat_fract": near_sat_fract,
     }
 
     # Optional: Add ATL08

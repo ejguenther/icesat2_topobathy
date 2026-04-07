@@ -294,10 +294,10 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
 
     # 1. Define the Masks based on whether this is the entry or exit wall
     if is_entry:
-        clearance_mask = (relative_dist >= -clearance_m) & (relative_dist < -1)
+        clearance_mask = (relative_dist >= -clearance_m) & (relative_dist < -0.75)
         roof_mask = (relative_dist >= 0) & (relative_dist <= roof_depth_m)
     else:
-        clearance_mask = (relative_dist > 1) & (relative_dist <= clearance_m)
+        clearance_mask = (relative_dist > 0.75) & (relative_dist <= clearance_m)
         roof_mask = (relative_dist >= -roof_depth_m) & (relative_dist <= 0)
         
 

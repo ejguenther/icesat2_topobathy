@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--extent-file', type=str, default='/home/ejg2736/dev/icesat2_topobathy/data/austin_laz_bigtex.gpkg', help="Extent GeoPackage")
     parser.add_argument('--geoid-file', type=str, default='/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif', help="ALS Geoid File")
     parser.add_argument('--buildings-file', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/footprint/austin_bldgs.gpkg', help="Austin Buildings File")
-    parser.add_argument('--out-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/outputs', help="Output Directory")
+    parser.add_argument('--out-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/outputs2', help="Output Directory")
     parser.add_argument('--als-swath-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/als_swaths', help="Directory to cache ALS swaths")
     parser.add_argument('--test-mode', action='store_true', help="Run in test mode")
     
@@ -105,7 +105,7 @@ def main():
                 print(f"    Finding intersected buildings...", flush=True)
                 # Find hit buildings
                 candidates_utm = find_intersected_buildings(
-                    is2_line_utm, gdf_buildings_utm, buffer_meters=5.0, building_filter_size=100.0
+                    is2_line_utm, gdf_buildings_utm, buffer_meters=5.0, building_filter_size=300.0
                 )
                 
                 if candidates_utm.empty:
@@ -172,7 +172,7 @@ def main():
                     target_building = hit_buildings.loc[target_building_id].geometry.buffer(20)
                     target_atxt = buildings_atxt.loc[target_building_id].geometry
                     target_als = clip_als_to_buffered_building(als_swath, target_building, buffer_m=1.0)
-                    target_als = target_als[np.abs(target_als.crosstrack) < 7] 
+                    target_als = target_als[np.abs(target_als.crosstrack) < 6] 
                     
                     if getattr(target_als, 'empty', True):
                         continue
@@ -196,7 +196,7 @@ def main():
                             target_ph = target_ph.copy()
                             target_ph['crosstrack'] = 0
                             
-                            target_ph = calculate_orthogonal_distance(target_ph, edge[direction], direction, threshold_m=10.0)
+                            target_ph = calculate_orthogonal_distance(target_ph, edge[direction], direction, threshold_m=15.0)
                             target_ph = classify_photons(target_ph, edge[direction]['roof_median_h'], z_tolerance=1.0)
                             
                             target_ph_out = os.path.join(args.out_dir, f"{out_name}_target_ph.pqt")
