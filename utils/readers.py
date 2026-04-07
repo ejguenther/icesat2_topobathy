@@ -346,7 +346,9 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         h_ph = np.array(f[gt + '/heights/h_ph'])
         quality_ph = np.array(f[gt + '/heights/quality_ph'])
         delta_time = np.array(f[gt + '/heights/delta_time'])
-        
+        signal_conf_ph0 = np.array(f[gt + '/heights/signal_conf_ph'])[:,0]
+
+
         # Read ATL03 segment rate at ATL03 photon rate
         solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
         solar_elevation = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/solar_elevation')
@@ -363,6 +365,7 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         "alongtrack": alongtrack,
         "solar_elevation": solar_elevation,
         "alongtrack": alongtrack,
+        "signal_conf_ph0": signal_conf_ph0,
     }
 
     # Optional: Add ATL08
