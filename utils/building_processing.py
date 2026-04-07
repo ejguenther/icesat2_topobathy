@@ -11,30 +11,84 @@ from sklearn.cluster import DBSCAN
 from sklearn.linear_model import RANSACRegressor
 
 
-def find_intersected_buildings(is2_line_utm, gdf_buildings_utm, buffer_meters=5.0, building_filter_size=100.0):
+def find_intersected_buildings(is2_line_utm, gdf_buildings_utm, buffer_meters=5.0, building_filter_size=300.0):
     """Strictly handles finding and filtering the geographic candidate buildings."""
     search_corridor = is2_line_utm.buffer(buffer_meters)
     candidates = gdf_buildings_utm[gdf_buildings_utm.intersects(search_corridor)].copy()
     candidates['area_sqm'] = candidates.geometry.area
     return candidates[candidates['area_sqm'] > building_filter_size]
 
+def remove_complex_intersections(gdf_candidates, is2_line_utm):
+    """
+    Filters out buildings where the ground track enters and exits multiple times 
+    (e.g., U-shaped or courtyard buildings).
+    """
+    if gdf_candidates.empty:
+        return gdf_candidates
+        
+    # Calculate the exact geometric intersection of the ground track line 
+    # against every candidate building polygon.
+    intersections = gdf_candidates.geometry.intersection(is2_line_utm)
+    
+    # Keep only buildings where the intersection is a single continuous line segment.
+    # This automatically drops 'MultiLineString' (multiple entries/exits) 
+    # and 'Point' (grazing the exact corner).
+    simple_crossings_mask = intersections.geom_type == 'LineString'
+    
+    # Apply the mask and return
+    gdf_filtered = gdf_candidates[simple_crossings_mask].copy()
+    
+    dropped_count = len(gdf_candidates) - len(gdf_filtered)
+    if dropped_count > 0:
+        print(f"Dropped {dropped_count} buildings due to complex geometry intersections.")
+        
+    return gdf_filtered
+
 def convert_buildings_to_atxt(gdf_candidates_utm, is2_line_utm, line_x, line_y, line_at_dist):
-    """Strictly handles transforming geometries to the AT/XT coordinate space."""
-    atxt_geometries = []
+    """Vectorized transformation of geometries to the AT/XT coordinate space."""
+    
+    if gdf_candidates_utm.empty:
+        return gdf_candidates_utm
+    
+    # 1. FLATTEN: Gather all coordinates into one list, keeping track of their lengths
+    all_coords = []
+    poly_lengths = []
+    
     for geom in gdf_candidates_utm.geometry:
         coords = np.array(geom.exterior.coords)
-        at_coords = estimate_alongtrack(coords, is2_line_utm, line_x, line_y, line_at_dist)
+        all_coords.append(coords)
+        poly_lengths.append(len(coords))  # Remember how many points make up this polygon
         
-        # NOTE: Be sure to use the upgraded curve-safe function we built earlier!
-        xt_coords = estimate_signed_crosstrack(coords, is2_line_utm) 
+    # Stack everything into one giant (N, 2) NumPy array
+    flat_coords = np.vstack(all_coords)
+    
+    # 2. COMPUTE: Run your math ONCE on the giant array
+    # (NumPy is optimized to do this at C-speed)
+    flat_at = estimate_alongtrack(flat_coords, is2_line_utm, line_x, line_y, line_at_dist)
+    flat_xt = estimate_signed_crosstrack(flat_coords, is2_line_utm) 
+    
+    # 3. RECONSTRUCT: Slice the flat arrays back into their respective Polygons
+    atxt_geometries = []
+    start_idx = 0
+    
+    for length in poly_lengths:
+        end_idx = start_idx + length
         
-        atxt_geometries.append(Polygon(zip(at_coords, xt_coords)))
+        # Slice out the specific AT and XT coordinates for this polygon
+        poly_at = flat_at[start_idx:end_idx]
+        poly_xt = flat_xt[start_idx:end_idx]
         
+        atxt_geometries.append(Polygon(zip(poly_at, poly_xt)))
+        
+        # Move the starting index forward for the next polygon
+        start_idx = end_idx
+        
+    # Build and return the final GeoDataFrame
     gdf_atxt = gdf_candidates_utm.copy()
     gdf_atxt.geometry = atxt_geometries
     gdf_atxt.crs = None 
+    
     return gdf_atxt
-
 
 def filter_grazing_hits(gdf_atxt, footprint_radius_m=7.0):
     """
@@ -80,7 +134,7 @@ def clip_als_to_buffered_building(df_als_swath, building_atxt_polygon, buffer_m=
     return clipped_gdf.drop(columns=['geometry'])
 
 
-def extract_building_edges_2d(df_trench, min_clearance_m=10.0):
+def extract_building_edges_2d(df_trench, buffer_shape):
     """
     Isolates the target roof and extracts the entry and exit lines.
     Returns a dictionary with the line parameters and validity status.
@@ -94,14 +148,29 @@ def extract_building_edges_2d(df_trench, min_clearance_m=10.0):
     clustering = DBSCAN(eps=3.0, min_samples=10).fit(df_bldgs[['alongtrack', 'crosstrack']])
     df_bldgs['cluster'] = clustering.labels_
     
-    # Ignore noise (-1) and find the cluster closest to AT=0
+    # Ignore noise (-1) and isolate valid clusters
     valid_clusters = df_bldgs[df_bldgs['cluster'] != -1]
     if valid_clusters.empty:
         return None
         
-    centroids = valid_clusters.groupby('cluster')['alongtrack'].apply(lambda x: abs(x.mean()))
-    target_cluster_id = centroids.idxmin()
-    target_roof = valid_clusters[valid_clusters['cluster'] == target_cluster_id]
+    # Get the reference center from the input shape
+    ref_xt = buffer_shape.centroid.y
+    ref_at = buffer_shape.centroid.x
+    
+    # Calculate distance from EVERY valid photon to the buffer center
+    distances = np.sqrt(
+        (valid_clusters['crosstrack'] - ref_xt)**2 + 
+        (valid_clusters['alongtrack'] - ref_at)**2
+    )
+    
+    # Find the index of the single photon closest to the buffer center
+    closest_point_idx = distances.idxmin()
+    
+    # Grab the cluster ID that this specific photon belongs to
+    target_cluster_id = valid_clusters.loc[closest_point_idx, 'cluster']
+    
+    # Isolate the target roof
+    target_roof = valid_clusters[valid_clusters['cluster'] == target_cluster_id].copy()
     
     # --- PHASE 2: FIT LINES & CHECK CORNERS ---
     # Bin by XT to find the front and back edges
@@ -188,7 +257,7 @@ def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.7, curv
     inlier_ratio = np.sum(inlier_mask) / len(inlier_mask)
     
     if inlier_ratio < straightness_threshold:
-        return False, "Failed Inlier Ratio (Likely an Extent Corner)"
+        return False, "Failed Inlier Ratio (Likely an Extent Corner)", {'iqr': np.nan, 'median_height': np.nan}
         
     # 2. The Slice Check (Catches "Slice" corners)
     # Get the predicted AT values for all XT points
@@ -212,7 +281,7 @@ def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.7, curv
         
     return True, "Valid Straight Wall", {'iqr': np.nan, 'median_height': np.nan}
 
-def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearance_m=7.0, roof_depth_m=3.0):
+def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearance_m=8.0, roof_depth_m=3.0):
     """
     Checks if the immediate vicinity of the edge is flat and clear of obstructions.
     """
@@ -240,7 +309,7 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     df_roof_bldg = df_roof[df_roof['classification'] == 6]
     
     if len(df_roof_bldg) < 10:
-        return False, "Failed Flatness: Not enough building points near the edge", metrics
+        return False, "Failed Flatness: Not enough building points near the edge", {'iqr': np.nan, 'median_height': np.nan}
         
     # Use the Interquartile Range (IQR) to check for flatness, ignoring stray noise
     median_height = np.median(df_roof_bldg['h_norm'])
@@ -258,21 +327,16 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     # Look for points within +/- 1 m of roof height
 
     obstructions = df_clearance[
-        (df_clearance['classification'].isin([2, 3, 4, 5, 6])) &
         (df_clearance['h_norm'] > q25 - 1) & 
         (df_clearance['h_norm'] < q75 + 1)
     ]
     
     if not obstructions.empty:
-
-        print(len(obstructions))
-        print(np.mean(obstructions['h_norm']))
-        print(np.unique(obstructions['classification']))
-        print(obstructions.index)
-
         return False, "Failed Clearance: Tall vegetation or building in approach path", metrics
         
-    # (Optional) Check minimum height of the roof edge
+
+    # --- CHECK 3: THE ROOF HEIGHT ---
+    # Check minimum height of the roof edge
     median_height = df_roof_bldg['h_norm'].median()
     if median_height < 3.0:
         return False, f"Failed Height: Roof edge is too short ({median_height:.1f}m)", metrics
