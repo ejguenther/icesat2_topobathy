@@ -105,3 +105,55 @@ def calculate_mae_cost(shift, icesat2_at, icesat2_xt, icesat2_z, als_surface_int
     return mae
 
 
+def calculate_z_shift(alongtrack, crosstrack, h_ph, optimal_shift_at, optimal_shift_xt , surface_interpolator):
+    """
+    Calculates the vertical shift (Z-shift) required to align ICESat-2 photons 
+    with the ALS surface, given the optimal AT/XT shift.
+    
+    Parameters:
+    -----------
+    alongtrack : ndarray
+        ICESat-2 along-track coordinates.
+    crosstrack : ndarray
+        ICESat-2 cross-track coordinates.
+    h_ph : ndarray
+        ICESat-2 photon elevations.
+    optimal_shift_at : float
+        The optimal along-track shift found during geolocation optimization.
+    optimal_shift_xt : float
+        The optimal cross-track shift found during geolocation optimization.
+    surface_interpolator : callable
+        A function or SciPy interpolator that takes (AT, XT) arrays and 
+        returns the corresponding ALS Z elevations.
+        
+    Returns:
+    --------
+    z_shift : float
+        The median vertical difference between the photons and the ALS surface 
+        at the optimal AT/XT alignment.
+    """
+    # 1. Apply the optimal AT/XT shift to the photon coordinates
+    shifted_at = alongtrack + optimal_shift_at
+    shifted_xt = crosstrack + optimal_shift_xt
+    
+    # 2. Sample the ALS surface at the new shifted coordinates
+    als_z = surface_interpolator((shifted_at, shifted_xt))
+    
+    # 3. Filter out NaN values (where the shift pushed points outside the ALS swath)
+    valid_mask = ~np.isnan(als_z)
+    
+    if not np.any(valid_mask):
+        # If all points are outside the swath, we cannot determine a shift.
+        # Return 0.0 as a fallback, though this indicates a data issue.
+        return 0.0
+        
+    # 4. Calculate the vertical residuals (the "error" in height)
+    residuals = h_ph[valid_mask] - als_z[valid_mask]
+    
+    # 5. Compute the median vertical shift
+    # We use the median instead of the mean to be robust against outliers 
+    # (e.g., remaining noise photons or vegetation).
+    z_shift = np.median(residuals)
+    
+    return z_shift  
+    

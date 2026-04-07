@@ -13,6 +13,43 @@ from typing import Union
 from . import readers
 import scipy
 
+def add_atl08_metadata_to_segments(df_seg, df_atl08):
+    """
+    Merges selected fields from df_atl08 into df_seg based on the 
+    closest 'alongtrack' distance.
+    """
+    # 1. Define the columns you want to bring over from ATL08
+    cols_to_keep = [
+        'alongtrack', 'asr', 'atlas_pa', 'beam_azimuth', 
+        'beam_coelev', 'brightness_flag', 'can_noise', 'urban_flag',
+        'dem_flag', 'dem_h', 'dem_removal_flag', 'h_dif_ref', 'layer_flag',
+        'msw_flag', 'night_flag', 'ph_removal_flag', 'psf_flag', 'rgt', 'sat_flag',
+        'segment_landcover', 'segment_snowcover', 'segment_watermask',
+        'sigma_across', 'sigma_along', 'sigma_atlas_land', 'sigma_h',
+        'sigma_topo', 'snr', 'solar_azimuth', 'terrain_flg'
+    ]
+    
+    # 2. Extract only those columns to keep the merge clean
+    df_atl08_sub = df_atl08[cols_to_keep].copy()
+    
+    # 3. merge_asof requires the join keys to be strictly sorted
+    df_seg_sorted = df_seg.sort_values('alongtrack')
+    df_atl08_sorted = df_atl08_sub.sort_values('alongtrack')
+    
+    # 4. Perform the merge
+    # direction='nearest' finds the closest alongtrack value (forwards or backwards)
+    df_merged = pd.merge_asof(
+        df_seg_sorted, 
+        df_atl08_sorted, 
+        on='alongtrack', 
+        direction='nearest'
+    )
+    
+    # Optional: sort back to original index if order matters
+    # df_merged = df_merged.sort_index() 
+    
+    return df_merged
+
 def filter_df_by_extent(df, extent):
     minx, miny, maxx, maxy = extent
     filtered_df = df[
