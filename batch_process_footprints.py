@@ -26,7 +26,8 @@ from utils.building_processing import (
     clip_als_to_buffered_building,
     extract_building_edges_2d,
     calculate_orthogonal_distance,
-    classify_photons,
+    classify_photons_als_dynamic,
+    remove_complex_intersections
 )
 
 
@@ -38,7 +39,7 @@ def main():
     parser.add_argument('--extent-file', type=str, default='/home/ejg2736/dev/icesat2_topobathy/data/austin_laz_bigtex.gpkg', help="Extent GeoPackage")
     parser.add_argument('--geoid-file', type=str, default='/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif', help="ALS Geoid File")
     parser.add_argument('--buildings-file', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/footprint/austin_bldgs.gpkg', help="Austin Buildings File")
-    parser.add_argument('--out-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/outputs2', help="Output Directory")
+    parser.add_argument('--out-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/outputs6', help="Output Directory")
     parser.add_argument('--als-swath-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/als_swaths', help="Directory to cache ALS swaths")
     parser.add_argument('--test-mode', action='store_true', help="Run in test mode")
     
@@ -87,6 +88,16 @@ def main():
                 if getattr(df_ph, 'empty', True):
                     print(f"    Empty dataframe found for {atl03_basename} {gt}. Skipping.", flush=True)
                     continue
+
+                solar_elevation = np.median(df_ph.solar_elevation)
+                if solar_elevation > 30: 
+                    print(f"    Daytime data found for {atl03_basename} {gt}. Skipping entirely.", flush=True)
+                    break
+
+                # Only process strong beams ['beam_type': 'strong']
+                if df_ph.attrs['beam_type'] != 'strong':
+                    print(f"    Weak beam data found for {atl03_basename} {gt}. Skipping.", flush=True)
+                    continue
                 
                 df_ph['crosstrack'] = 0
                 
@@ -105,16 +116,21 @@ def main():
                 print(f"    Finding intersected buildings...", flush=True)
                 # Find hit buildings
                 candidates_utm = find_intersected_buildings(
-                    is2_line_utm, gdf_buildings_utm, buffer_meters=5.0, building_filter_size=300.0
+                    is2_line_utm, gdf_buildings_utm, buffer_meters=10.0
                 )
                 
-                if candidates_utm.empty:
+                # 3. Remove buildings that have complicated building shapes
+                clean_candidates = remove_complex_intersections(candidates_utm, is2_line_utm)
+
+                if clean_candidates.empty:
                     print(f"    No buildings hit for {atl03_basename} {gt}. Skipping.", flush=True)
                     continue
+
+                clean_candidates.to_file(f"{args.out_dir}/austin_bldgs_clean_{atl03_basename}_{gt}.gpkg")
                     
                 print(f"    Converting to along-track...", flush=True)
                 buildings_atxt = convert_buildings_to_atxt(
-                    candidates_utm, is2_line_utm, line_x, line_y, line_at_dist
+                    clean_candidates, is2_line_utm, line_x, line_y, line_at_dist
                 )
                 
                 hit_buildings = filter_grazing_hits(buildings_atxt)
@@ -178,31 +194,37 @@ def main():
                         continue
                         
                     edge = extract_building_edges_2d(target_als, target_atxt)
+                    
+                    if edge is None:
+                        continue
 
                     edge_out = os.path.join(args.out_dir, f"edges_{atl03_basename}_{gt}_{target_building_id}.json")
                     with open(edge_out, "w") as f:
-                        json.dump(edge, f, indent=4)
+                        json.dump(edge, f, indent=4)    
                     
                     for direction in ['entry', 'exit']:
                         out_name = f"{atl03_basename}_{gt}_{target_building_id}_{direction}"
                         
-                        if edge[direction]['valid']:
-                            intercept = edge[direction]['intercept']
-                            target_ph = df_ph[df_ph.alongtrack.between(intercept - 50, intercept + 50)]
+                        # if edge[direction]['valid']: # Filtered for now because I want to write out all building edges
+                        intercept = edge[direction]['intercept']
+                        target_ph = df_ph[df_ph.alongtrack.between(intercept - 100, intercept + 100)]
+                        
+                        if getattr(target_ph, 'empty', True):
+                            continue
                             
-                            if getattr(target_ph, 'empty', True):
-                                continue
-                                
-                            target_ph = target_ph.copy()
-                            target_ph['crosstrack'] = 0
-                            
-                            target_ph = calculate_orthogonal_distance(target_ph, edge[direction], direction, threshold_m=15.0)
-                            target_ph = classify_photons(target_ph, edge[direction]['roof_median_h'], z_tolerance=1.0)
-                            
-                            target_ph_out = os.path.join(args.out_dir, f"{out_name}_target_ph.pqt")
-                            
-                            target_ph.to_parquet(target_ph_out)
-                            print(f"      Saved {direction} edge output for building {target_building_id}", flush=True)
+                        target_ph = target_ph.copy()
+                        target_ph['crosstrack'] = 0
+                        
+                        target_ph = calculate_orthogonal_distance(target_ph, edge[direction], direction, threshold_m=30.0)
+                        edge_als = calculate_orthogonal_distance(target_als, edge[direction], direction, threshold_m=30.0)
+                        target_ph = classify_photons_als_dynamic(target_ph, edge_als, z_tolerance=1.0)
+
+                        edge_als_out = os.path.join(args.out_dir, f"{out_name}_edge_als.pqt")
+                        target_ph_out = os.path.join(args.out_dir, f"{out_name}_target_ph.pqt")
+                        
+                        target_ph.to_parquet(target_ph_out)
+                        edge_als.to_parquet(edge_als_out)
+                        print(f"      Saved {direction} edge output for building {target_building_id}", flush=True)
 
             except Exception as e:
                 print(f"    Error processing {atl03_basename} {gt}: {e}", flush=True)

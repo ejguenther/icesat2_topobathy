@@ -31,7 +31,7 @@ def plot_alongtrack_atl08(alongtrack,h_ph,atl08_class,title):
     plt.plot(alongtrack[atl08_class == 2],h_ph[atl08_class == 2],'.',color=[0.12156863, 0.41960784, 0.12156863],label='Canopy (2)')
     plt.plot(alongtrack[atl08_class == 1],h_ph[atl08_class == 1],'.',color=[0.69803922, 0.44313725, 0.23921569],label='Topography (1)')
     plt.xlabel('Alongtrack (m)')
-    plt.ylabel('Orthometric Height (m)')
+    plt.ylabel('Height (m)')
     plt.legend(markerscale=3)
     plt.title(title)
     plt.show()

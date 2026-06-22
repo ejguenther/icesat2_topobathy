@@ -89,6 +89,11 @@ ATL08_AGG_CONFIG = [
 
     # Non-stanard Aggregations
     {'field': 'delta_time', 'operation': 'get_len_unique', 'class_field': 'atl08_class', 'class_id': [0,1,2,3], 'outfield': 'n_shots'},
+    
+    # Complex Metrics
+    {'field': 'h_norm', 'operation': 'get_canopy_cover', 'class_field': 'atl08_class', 'class_id': [1,2,3], 'outfield': 'canopy_cover', 'kwargs': {'height_threshold': 2.0}},
+    {'field': 'h_norm', 'operation': 'get_pai', 'class_field': 'atl08_class', 'class_id': [1,2,3], 'outfield': 'pai', 'kwargs': {'height_threshold': 2.0, 'k': 0.5}},
+    {'field': 'h_ph', 'operation': 'prepare_segment_bins', 'class_field': 'atl08_class', 'class_id': [0,1,2,3,40,41], 'outfield': 'profile', 'kwargs': {'bin_height_m': 0.1, 'background_rate_hz': 1e6}},
 ]
 
 # --- Configuration: ALS Aggregation Recipe ---
@@ -102,8 +107,16 @@ ALS_AGG_CONFIG = [
     {'field': 'ortho_h', 'operation': 'median', 'class_field': 'classification', 'class_id': [40], 'outfield': 'als_bathy_median'},
     {'field': 'ortho_h', 'operation': 'median', 'class_field': 'classification', 'class_id': [41], 'outfield': 'als_surface_median'},
 
+    # Terrain & Bathy
+    {'field': 'ellip_h', 'operation': 'median', 'class_field': 'classification', 'class_id': [2], 'outfield': 'als_topo_ellip_median'},
+    {'field': 'ellip_h', 'operation': 'median', 'class_field': 'classification', 'class_id': [40], 'outfield': 'als_bathy_ellip_median'},
+    {'field': 'ellip_h', 'operation': 'median', 'class_field': 'classification', 'class_id': [41], 'outfield': 'als_surface_ellip_median'},
+
+
     # Canopy
     {'field': 'h_norm', 'operation': 'get_max98', 'class_field': 'classification', 'class_id': [3,4,5], 'outfield': 'als_norm_veg_max98'},
+    {'field': 'h_norm', 'operation': 'get_canopy_cover', 'class_field': 'classification', 'class_id': list(range(1, 100)), 'outfield': 'als_canopy_cover', 'kwargs': {'height_threshold': 2.0}},
+    {'field': 'h_norm', 'operation': 'get_pai', 'class_field': 'classification', 'class_id': list(range(1, 100)), 'outfield': 'als_pai', 'kwargs': {'height_threshold': 2.0, 'k': 0.5}},
 ]
 
 

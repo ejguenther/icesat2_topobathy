@@ -90,26 +90,37 @@ def convert_buildings_to_atxt(gdf_candidates_utm, is2_line_utm, line_x, line_y, 
     
     return gdf_atxt
 
-def filter_grazing_hits(gdf_atxt, footprint_radius_m=7.0):
+def filter_grazing_hits(gdf_atxt, footprint_radius_m=7.0, min_at_length_m=35.0):
     """
-    Filters out buildings that do not fully encompass the width of the laser footprint.
-    In AT/XT space, X is Along-Track and Y is Cross-Track.
+    Filters out buildings that do not fully encompass the width of the laser footprint,
+    and ensures they are long enough to prevent entry/exit edge interference.
+    
+    In AT/XT space:
+    X (minx, maxx) represents Along-Track (Length along the laser path)
+    Y (miny, maxy) represents Cross-Track (Width across the laser path)
     """
-    # .bounds returns a dataframe with columns: minx, miny, maxx, maxy
     bounds = gdf_atxt.bounds
     
+    # 1. CROSS-TRACK CHECK (Is it a direct hit?)
     # miny is the maximum distance to the "left" (Negative XT)
     # maxy is the maximum distance to the "right" (Positive XT)
     straddles_left = bounds['miny'] < -footprint_radius_m
     straddles_right = bounds['maxy'] > footprint_radius_m
+    valid_width = straddles_left & straddles_right
     
-    # The building must extend past the footprint on BOTH sides
-    full_hit_mask = straddles_left & straddles_right
+    # 2. ALONG-TRACK CHECK (Is it long enough?)
+    # Calculates the total travel distance of the laser over the roof
+    building_length_at = bounds['maxx'] - bounds['minx']
+    valid_length = building_length_at >= min_at_length_m
     
-    # Return only the buildings that take a direct hit
-    good_hits = gdf_atxt[full_hit_mask].copy()
+    # The building must pass BOTH physical requirements
+    full_valid_mask = valid_width & valid_length
     
-    print(f"Filtered out {len(gdf_atxt) - len(good_hits)} grazing hits.")
+    # Return only the pristine target buildings
+    good_hits = gdf_atxt[full_valid_mask].copy()
+    
+    print(f"Filtered out {len(gdf_atxt) - len(good_hits)} buildings (Grazing or Too Short).")
+    
     return good_hits
 
 
@@ -217,20 +228,20 @@ def extract_building_edges_2d(df_trench, buffer_shape):
     # Build the final dictionary
     edges = {
         'entry': {
-            'slope': ransac_entry.estimator_.coef_[0], 
-            'intercept': ransac_entry.estimator_.intercept_,
-            'valid': entry_valid,
-            'reason': entry_reason,
-            'roof_median_h': entry_metrics['median_height'],
-            'roof_iqr': entry_metrics['iqr']
+            'slope': float(ransac_entry.estimator_.coef_[0]), 
+            'intercept': float(ransac_entry.estimator_.intercept_),
+            'valid': bool(entry_valid),
+            'reason': str(entry_reason),
+            'roof_median_h': float(entry_metrics['median_height']),
+            'roof_iqr': float(entry_metrics['iqr'])
         },
         'exit': {
-            'slope': ransac_exit.estimator_.coef_[0], 
-            'intercept': ransac_exit.estimator_.intercept_,
-            'valid': exit_valid,
-            'reason': exit_reason,
-            'roof_median_h': exit_metrics['median_height'],
-            'roof_iqr': exit_metrics['iqr']
+            'slope': float(ransac_exit.estimator_.coef_[0]), 
+            'intercept': float(ransac_exit.estimator_.intercept_),
+            'valid': bool(exit_valid),
+            'reason': str(exit_reason),
+            'roof_median_h': float(exit_metrics['median_height']),
+            'roof_iqr': float(exit_metrics['iqr'])
         }
     }
     
@@ -248,7 +259,7 @@ def create_line(slope, intercept, x_start, x_stop):
     return (x_start, x_stop), (y_start, y_stop)
 
 
-def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.7, curve_threshold=1.5 ):
+def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.5, curve_threshold=1.5 ):
     """
     Checks if the RANSAC fit represents a clean, straight wall rather than a corner.
     """
@@ -257,7 +268,7 @@ def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.7, curv
     inlier_ratio = np.sum(inlier_mask) / len(inlier_mask)
     
     if inlier_ratio < straightness_threshold:
-        return False, "Failed Inlier Ratio (Likely an Extent Corner)", {'iqr': np.nan, 'median_height': np.nan}
+        return False, f"Failed Inlier Ratio (Likely an Extent Corner {inlier_ratio:.2f})", {'iqr': np.nan, 'median_height': np.nan}
         
     # 2. The Slice Check (Catches "Slice" corners)
     # Get the predicted AT values for all XT points
@@ -281,7 +292,7 @@ def is_valid_wall(xt_pts, at_pts, ransac_model, straightness_threshold=0.7, curv
         
     return True, "Valid Straight Wall", {'iqr': np.nan, 'median_height': np.nan}
 
-def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearance_m=8.0, roof_depth_m=3.0):
+def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearance_m=6.0, roof_depth_m=3.0):
     """
     Checks if the immediate vicinity of the edge is flat and clear of obstructions.
     """
@@ -294,10 +305,10 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
 
     # 1. Define the Masks based on whether this is the entry or exit wall
     if is_entry:
-        clearance_mask = (relative_dist >= -clearance_m) & (relative_dist < -0.75)
+        clearance_mask = (relative_dist >= -clearance_m) & (relative_dist < -1)
         roof_mask = (relative_dist >= 0) & (relative_dist <= roof_depth_m)
     else:
-        clearance_mask = (relative_dist > 0.75) & (relative_dist <= clearance_m)
+        clearance_mask = (relative_dist > 1) & (relative_dist <= clearance_m)
         roof_mask = (relative_dist >= -roof_depth_m) & (relative_dist <= 0)
         
 
@@ -308,7 +319,7 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     # Isolate just the building points on the roof lip
     df_roof_bldg = df_roof[df_roof['classification'] == 6]
     
-    if len(df_roof_bldg) < 10:
+    if len(df_roof_bldg) < 5:
         return False, "Failed Flatness: Not enough building points near the edge", {'iqr': np.nan, 'median_height': np.nan}
         
     # Use the Interquartile Range (IQR) to check for flatness, ignoring stray noise
@@ -316,10 +327,10 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     q25, q75 = np.percentile(df_roof_bldg['h_norm'], [25, 75])
     iqr = q75 - q25
 
-    metrics = {'iqr': iqr, 'median_height': median_height}
+    metrics = {'iqr': float(iqr), 'median_height': float(median_height)}
     
-    if iqr > 0.5: # 0.5 meters of roughness tolerance
-        return False, f"Failed Flatness: Roof edge is too rough or sloped (IQR: {iqr:.2f}m)", metrics
+    if iqr > 0.75: # 1.0 meters of roughness tolerance
+        return False, f"Failed Flatness: Roof edge is too rough or sloped (IQR: {float(iqr):.2f}m)", metrics
 
     # --- CHECK 2: THE CLEARANCE ZONE ---
     df_clearance = df_trench[clearance_mask]
@@ -327,8 +338,8 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     # Look for points within +/- 1 m of roof height
 
     obstructions = df_clearance[
-        (df_clearance['h_norm'] > q25 - 1) & 
-        (df_clearance['h_norm'] < q75 + 1)
+        (df_clearance['h_norm'] > median_height - 1) & 
+        (df_clearance['h_norm'] < median_height + 1)
     ]
     
     if not obstructions.empty:
@@ -338,7 +349,7 @@ def check_local_edge_conditions(df_trench, ransac_model, is_entry=True, clearanc
     # --- CHECK 3: THE ROOF HEIGHT ---
     # Check minimum height of the roof edge
     median_height = df_roof_bldg['h_norm'].median()
-    if median_height < 3.0:
+    if median_height < 5.0:
         return False, f"Failed Height: Roof edge is too short ({median_height:.1f}m)", metrics
 
     return True, "Valid Edge", metrics
@@ -421,6 +432,82 @@ def classify_photons(df_local_ph, roof_median, z_tolerance=2.0):
     return df_local_ph
 
 
+import numpy as np
+import pandas as pd
+
+def classify_photons_als_dynamic(df_ph, df_als, z_tolerance=1.0, fallback_tolerance=1.5):
+    """
+    Classifies ICESat-2 photons using a two-pass approach:
+    Pass 1: Fits localized, sloped elevation profiles to coincident ALS data.
+    Pass 2: A 'fallback' flat median threshold to catch edge-case anomalies.
+    
+    Inputs must already have 'dist_to_wall' calculated.
+    df_ph must have 'h_ph'.
+    df_als must have 'ellip_h' and 'classification'.
+    """
+    # Initialize all points as noise
+    df_ph = df_ph.copy()
+    df_ph['target_class'] = 'noise'
+    
+    # 1. Isolate the ALS components
+    als_ground = df_als[df_als['classification'] == 2]
+    als_roof = df_als[df_als['classification'] == 6]
+    
+    # ==========================================
+    # PASS 1: DYNAMIC (SLOPED) CLASSIFICATION
+    # ==========================================
+    
+    # --- GROUND ---
+    if len(als_ground) > 5:
+        m_g, b_g = np.polyfit(als_ground['dist_to_wall'], als_ground['ellip_h'], 1)
+        expected_ground_z = (m_g * df_ph['dist_to_wall']) + b_g
+        is_ground = np.abs(df_ph['h_ph'] - expected_ground_z) <= z_tolerance
+        df_ph.loc[is_ground, 'target_class'] = 'ground'
+        
+    elif len(als_ground) > 0:
+        med_g = als_ground['ellip_h'].median()
+        is_ground = np.abs(df_ph['h_ph'] - med_g) <= z_tolerance
+        df_ph.loc[is_ground, 'target_class'] = 'ground'
+
+    # --- ROOF ---
+    if len(als_roof) > 5:
+        m_r, b_r = np.polyfit(als_roof['dist_to_wall'], als_roof['ellip_h'], 1)
+        expected_roof_z = (m_r * df_ph['dist_to_wall']) + b_r
+        is_roof = np.abs(df_ph['h_ph'] - expected_roof_z) <= z_tolerance
+        df_ph.loc[is_roof, 'target_class'] = 'roof'
+        
+    elif len(als_roof) > 0:
+        med_r = als_roof['ellip_h'].median()
+        is_roof = np.abs(df_ph['h_ph'] - med_r) <= z_tolerance
+        df_ph.loc[is_roof, 'target_class'] = 'roof'
+
+
+    # ==========================================
+    # PASS 2: THE "DUMB" MEDIAN FALLBACK
+    # ==========================================
+    
+    # Create a mask of points that the dynamic pass missed (still 'noise')
+    noise_mask = df_ph['target_class'] == 'noise'
+
+    # --- FALLBACK GROUND ---
+    if len(als_ground) > 0:
+        med_g = als_ground['ellip_h'].median()
+        # Find points that are currently noise, but fall within the fallback tolerance of the median ground
+        fallback_ground = noise_mask & (np.abs(df_ph['h_ph'] - med_g) <= fallback_tolerance)
+        df_ph.loc[fallback_ground, 'target_class'] = 'ground'
+
+    # Update noise mask before doing roof, just in case a point was reclassified to ground
+    noise_mask = df_ph['target_class'] == 'noise'
+
+    # --- FALLBACK ROOF ---
+    if len(als_roof) > 0:
+        med_r = als_roof['ellip_h'].median()
+        # Find points that are currently noise, but fall within the fallback tolerance of the median roof
+        fallback_roof = noise_mask & (np.abs(df_ph['h_ph'] - med_r) <= fallback_tolerance)
+        df_ph.loc[fallback_roof, 'target_class'] = 'roof'
+
+    return df_ph
+
 def compute_esf(df_ph, min_dist=-10.0, max_dist=10.0, bin_size=0.5):
     """
     Computes the Edge Spread Function (ESF) ratio from classified photons.
@@ -471,3 +558,132 @@ def compute_esf(df_ph, min_dist=-10.0, max_dist=10.0, bin_size=0.5):
     df_esf = df_esf.rename(columns={'dist_bin': 'distance_to_wall'})
     
     return df_esf
+
+import numpy as np
+import pandas as pd
+from scipy.optimize import curve_fit
+from scipy.special import erf
+from scipy.signal import savgol_filter
+
+def extract_laser_footprint2(df_esf):
+    # 1. Clean the data 
+    df_clean = df_esf.dropna(subset=['esf_ratio']).copy()
+    x_data = df_clean['distance_to_wall'].astype(float).values
+    y_data = df_clean['esf_ratio'].astype(float).values
+    
+    # 2. Define the theoretical ESF model (Error Function)
+    def esf_model(x, mu, sigma):
+        return 0.5 * (1 + erf((x - mu) / (sigma * np.sqrt(2))))
+        
+    # 3. Fit the model to your real data
+    initial_guess = [0.0, 2.75]
+    popt, pcov = curve_fit(esf_model, x_data, y_data, p0=initial_guess)
+    mu_fit, sigma_fit = popt
+    
+    # 4. Calculate the Footprint Diameters 
+    fwhm = 2 * np.sqrt(2 * np.log(2)) * sigma_fit
+    diam_86_5 = 4.0 * sigma_fit
+    diam_99_0 = 2 * np.sqrt(-2 * np.log(0.01)) * sigma_fit
+    
+    # 5. Generate the IDEAL curves (Perfect Math)
+    x_smooth = np.linspace(x_data.min(), x_data.max(), 500)
+    y_esf_ideal = esf_model(x_smooth, mu_fit, sigma_fit)
+    
+    # This is the perfect, symmetrical bell curve
+    y_pdf_ideal = (1 / (sigma_fit * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x_smooth - mu_fit) / sigma_fit)**2)
+    
+    # 6. Generate the EMPIRICAL curves (Actual Measurements)
+    # Dynamically size the filter window based on data density (must be odd)
+    window_len = min(15, len(x_data) - (1 if len(x_data) % 2 == 0 else 0)) 
+    
+    # Smooth the raw S-curve to prevent derivative explosions
+    y_esf_smoothed = savgol_filter(y_data, window_length=window_len, polyorder=3)
+    
+    # The actual numerical derivative of the smoothed data
+    y_pdf_empirical = np.gradient(y_esf_smoothed, x_data)
+    y_pdf_smoothed = savgol_filter(y_pdf_empirical, window_length=window_len, polyorder=3)
+    
+    metrics = {
+        'mu': mu_fit,
+        'sigma': sigma_fit,
+        'fwhm': fwhm,
+        'diam_86_5': diam_86_5,
+        'diam_99_0': diam_99_0
+    }
+    
+    # We now return a dictionary of the curves so it's easier to plot them
+    curves = {
+        'x_ideal': x_smooth,
+        'y_esf_ideal': y_esf_ideal,
+        'y_pdf_ideal': y_pdf_ideal,
+        'x_empirical': x_data,
+        'y_esf_empirical': y_esf_smoothed,
+        'y_pdf_empirical': y_pdf_empirical,
+        'y_pdf_smoothed': y_pdf_smoothed
+    }
+    
+    return curves, metrics
+
+def extract_laser_footprint(df_esf):
+    """
+    Fits an Error Function to the Edge Spread Function to extract the Gaussian PDF.
+    """
+    # 1. Clean the data (Drop any bins that had 0 total photons)
+    df_clean = df_esf.dropna(subset=['esf_ratio']).copy()
+    
+    x_data = df_clean['distance_to_wall'].astype(float).values
+    y_data = df_clean['esf_ratio'].astype(float).values
+    
+    # 2. Define the theoretical ESF model (Error Function)
+    def esf_model(x, mu, sigma):
+        """
+        mu: Horizontal shift (identifies sub-meter alignment errors with the wall)
+        sigma: The standard deviation of the Gaussian laser beam
+        """
+        return 0.5 * (1 + erf((x - mu) / (sigma * np.sqrt(2))))
+        
+    # 3. Fit the model to your real data
+    # We provide an initial guess:
+    # mu = 0 (We assume the wall is perfectly at 0)
+    # sigma = 2.75 (Because an 11m diameter is roughly 4*sigma)
+    initial_guess = [0.0, 2.75]
+    
+    # curve_fit uses non-linear least squares to find the perfect mu and sigma
+    popt, pcov = curve_fit(esf_model, x_data, y_data, p0=initial_guess)
+    
+    mu_fit, sigma_fit = popt
+    
+    # 4. Calculate the Footprint Diameters using exact Gaussian geometry
+    # A. FWHM (Full Width at Half Maximum)
+    fwhm = 2 * np.sqrt(2 * np.log(2)) * sigma_fit
+    
+    # B. NASA Standard Effective Footprint (1/e^2 boundary, 86.5% power)
+    diam_86_5 = 4.0 * sigma_fit
+    
+    # C. The 99% Power Containment boundary
+    diam_99_0 = 2 * np.sqrt(-2 * np.log(0.01)) * sigma_fit
+    
+    # 5. Generate the smooth, theoretical curves for plotting
+    x_smooth = np.linspace(x_data.min(), x_data.max(), 500)
+    y_esf_fit = esf_model(x_smooth, mu_fit, sigma_fit)
+    y_pdf = (1 / (sigma_fit * np.sqrt(2 * np.pi))) * np.exp(-0.5 * ((x_smooth - mu_fit) / sigma_fit)**2)
+    
+    # --- Reporting ---
+    print(f"Optimal Alignment Offset (mu): {mu_fit:.3f} m")
+    print(f"Gaussian Standard Deviation (sigma): {sigma_fit:.3f} m\n")
+    
+    print(f"--- BEAM DIAMETER METRICS ---")
+    print(f"FWHM (50.0% Power):           {fwhm:.2f} m")
+    print(f"Effective 1/e^2 (86.5% Power):{diam_86_5:.2f} m")
+    print(f"Total Width (99.0% Power):    {diam_99_0:.2f} m")
+    
+    # You can return them all as a dictionary if you need them for your dataframe
+    metrics = {
+        'mu': mu_fit,
+        'sigma': sigma_fit,
+        'fwhm': fwhm,
+        'diam_86_5': diam_86_5,
+        'diam_99_0': diam_99_0
+    }
+    
+    return x_smooth, y_esf_fit, y_pdf, metrics

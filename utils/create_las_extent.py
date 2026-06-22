@@ -100,7 +100,9 @@ def create_gdf_las_extent(las_list, num_processes=None):
         data = [result for result in results if result is not None]
     df = pd.DataFrame(data)
 
-        
+    if len(df) == 0:
+        print("No data found.")
+        return None
     
     # Handle rows with missing CRS
     missing_crs = df[df['parse_crs'].isnull()]

@@ -328,6 +328,42 @@ def read_atl08_data_mapping(filepath: str, beam_label: str):
 
     return classed_pc_indx, classed_pc_flag, classed_index_seg, ph_h
 
+def get_atl03_metadata(file_path, gt):
+    with h5py.File(file_path, 'r') as f:
+        # 1. Orbit Info (Global to the file)
+        sc_orient = f['orbit_info/sc_orient'][0]
+        orient_str = {0: "Backward", 1: "Forward", 2: "Transition"}.get(sc_orient, "Unknown")
+        
+        rgt = int(f['orbit_info/rgt'][0])
+        cycle = int(f['orbit_info/cycle_number'][0])
+        
+        # 2. Beam Specific Info
+        beam_type = "N/A"
+        spot_number = "N/A"
+        flight_dir = "Unknown"
+        
+        if gt in f:
+            # Strength and Spot
+            beam_type = f[gt].attrs['atlas_beam_type'].decode('utf-8')
+            spot_number = f[gt].attrs['atlas_spot_number'].decode()
+            
+            # 3. Determine Ascending vs Descending
+            # We grab the first and last latitude values from the photon heights
+            latitudes = f[gt]['heights/lat_ph']
+            if latitudes.shape[0] > 1:
+                start_lat = latitudes[0]
+                end_lat = latitudes[-1]
+                flight_dir = "Ascending" if end_lat > start_lat else "Descending"
+
+    return {
+        "orientation": orient_str,
+        "rgt": rgt,
+        "cycle": cycle,
+        "beam_type": beam_type,
+        "spot_number": spot_number,
+        "direction": flight_dir
+    }
+
 def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
     """
     Reads ATL03 and optionally merges ATL08 and ATL24 data.
@@ -365,6 +401,7 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
 
         alongtrack = processing.get_atl03_segment_to_photon(atl03_file,gt,'/geolocation/segment_dist_x')
         alongtrack = alongtrack + np.array(f[gt + '/heights/dist_ph_along'])
+        crosstrack = np.zeros(len(alongtrack))
 
     # Initialize Dictionary
     data_dict = {
@@ -374,6 +411,7 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         "quality_ph": quality_ph,
         "delta_time": delta_time,
         "alongtrack": alongtrack,
+        "crosstrack": crosstrack,
         "solar_elevation": solar_elevation,
         "signal_conf_ph0": signal_conf_ph0,
         "signal_conf_ph1": signal_conf_ph1,
@@ -411,4 +449,18 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
             data_dict["combined_class"] = combined
             data_dict["contested_class"] = contested
 
-    return pd.DataFrame(data_dict)
+    metadata = get_atl03_metadata(atl03_file, gt)
+
+    df = pd.DataFrame(data_dict)
+    df.attrs['atl03_file'] = atl03_file
+    df.attrs['gt'] = gt
+    df.attrs['atl08_file'] = atl08_file if atl08_file else None
+    df.attrs['atl24_file'] = atl24_file if atl24_file else None
+    df.attrs['sc_orient'] = metadata['orientation']
+    df.attrs['beam_type'] = metadata['beam_type']
+    df.attrs['spot_number'] = metadata['spot_number']
+    df.attrs['rgt'] = metadata['rgt']
+    df.attrs['cycle'] = metadata['cycle']
+    df.attrs['direction'] = metadata['direction']
+    
+    return df
