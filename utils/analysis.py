@@ -83,6 +83,77 @@ def percentile_rh(arr):
 
     return out_list
 
+def get_pai(series, height_threshold=1.5, k=0.5):
+    try:
+        total_returns = len(series)
+        if total_returns == 0:
+            return np.nan
+        ground_returns = (series < height_threshold).sum()
+        if ground_returns == 0:
+            gap_fraction = 1e-4 
+        else:
+            gap_fraction = ground_returns / total_returns
+        pai = -np.log(gap_fraction) / k
+        return pai
+    except:
+        return np.nan
+
+def get_canopy_cover(series, height_threshold=2.0):
+    try:
+        total_returns = len(series)
+        if total_returns == 0:
+            return 0.0
+        canopy_returns = (series >= height_threshold).sum()
+        canopy_cover_pct = (canopy_returns / total_returns) * 100.0
+        return canopy_cover_pct
+    except:
+        return np.nan
+
+def prepare_segment_bins(df_photons, bin_height_m=0.1, background_rate_hz=1e6):
+    """
+    PART 1: Vertical profile time-binning.
+    Organizes mapped ATL03/ATL08 photons chronologically by time-of-arrival.
+    """
+    # 1. Determine instrument channel array scale
+    M = 4 
+
+    # Calculate the number of unique shots
+    laser_shots_N = len(np.unique(df_photons.delta_time))
+    
+    # 2. Extract vertical bounds of the segment window
+    max_h = df_photons['h_ph'].max()
+    min_h = df_photons['h_ph'].min()
+    
+    # Create bin edges from HIGHEST to LOWEST elevation (Chronological order)
+    bin_edges = np.arange(max_h, min_h - bin_height_m, -bin_height_m)
+    num_bins = len(bin_edges) - 1
+    
+    # Initialize empty arrays for bin aggregation
+    E_v = np.zeros(num_bins)   # Raw vegetation events
+    E_g = np.zeros(num_bins)   # Raw ground events
+    E_sn = np.zeros(num_bins)  # Total observed events
+    N_n = np.zeros(num_bins)   # Target background noise counts per bin
+    
+    # 3. Calculate expected background noise photons per bin across the segment
+    delta_t = (2 * bin_height_m) / 3e8  
+    bin_noise_photons = background_rate_hz * delta_t * laser_shots_N * M
+    
+    # 4. Chronological aggregation loop
+    for i in range(num_bins):
+        upper_bound = bin_edges[i]
+        lower_bound = bin_edges[i+1]
+        
+        bin_subset = df_photons[(df_photons['h_ph'] <= upper_bound) & 
+                                (df_photons['h_ph'] > lower_bound)]
+        
+        E_v[i] = np.sum((bin_subset['atl08_class'] == 2) | (bin_subset['atl08_class'] == 2))
+        E_g[i] = np.sum(bin_subset['atl08_class'] == 1)
+        E_sn[i] = len(bin_subset)
+        
+        N_n[i] = bin_noise_photons
+        
+    return E_v, E_g, E_sn, N_n, M, laser_shots_N
+
 def aggregate_segment_metrics(
     df_ph: pd.DataFrame, 
     df_seg: pd.DataFrame, 
@@ -92,7 +163,8 @@ def aggregate_segment_metrics(
     operation: str,
     class_field: str,
     class_id: Union[int, List[int]],
-    outfield: str = None
+    outfield: str = None,
+    **kwargs
 ) -> pd.DataFrame:
     """
     Filters, groups, and aggregates photon data, then merges it into a segment DataFrame.
@@ -179,6 +251,52 @@ def aggregate_segment_metrics(
             )
         )
     
+    elif operation == 'get_pai':
+        height_threshold = kwargs.get('height_threshold', 1.5)
+        k = kwargs.get('k', 0.5)
+        pai_func = lambda x: get_pai(x, height_threshold=height_threshold, k=k)
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=pai_func)}
+            )
+        )
+    
+    elif operation == 'get_canopy_cover':
+        height_threshold = kwargs.get('height_threshold', 2.0)
+        cc_func = lambda x: get_canopy_cover(x, height_threshold=height_threshold)
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .agg(
+                 **{outfield: pd.NamedAgg(column=field, aggfunc=cc_func)}
+            )
+        )
+    
+    elif operation == 'prepare_segment_bins':
+        bin_height_m = kwargs.get('bin_height_m', 0.1)
+        background_rate_hz = kwargs.get('background_rate_hz', 1e6)
+        
+        def apply_prep(df_group):
+            E_v, E_g, E_sn, N_n, M, laser_shots_N = prepare_segment_bins(
+                df_group, bin_height_m, background_rate_hz
+            )
+            return pd.Series(
+                [E_v, E_g, E_sn, N_n, M, laser_shots_N],
+                index=['E_v', 'E_g', 'E_sn', 'N_n', 'M', 'laser_shots_N']
+            )
+        
+        aggregated_data = (
+            df_ph[df_ph[class_field].isin(class_id)]
+            .groupby(key_field)
+            .apply(apply_prep)
+        )
+        
+        # If outfield prefix is provided, prepend it to the new column names
+        if outfield:
+            aggregated_data.columns = [f"{outfield}_{c}" for c in aggregated_data.columns]
+    
     else:
         aggregated_data = (
             df_ph[df_ph[class_field].isin(class_id)]
@@ -243,6 +361,9 @@ def aggregate_by_segment(df, config_list, res=20, min_at=None):
         if 'field' in cfg and cfg['field'] not in df.columns:
             continue
             
+        # Extract kwargs if present
+        op_kwargs = cfg.get('kwargs', {})
+            
         # Call your existing single-metric aggregator
         df_seg = aggregate_segment_metrics(
             df, 
@@ -252,7 +373,8 @@ def aggregate_by_segment(df, config_list, res=20, min_at=None):
             operation=cfg['operation'],
             class_field=cfg['class_field'],
             class_id=cfg['class_id'],
-            outfield=cfg['outfield']
+            outfield=cfg.get('outfield'),
+            **op_kwargs
         )
 
     # 3. Standard Cleanup (can be customized if needed)

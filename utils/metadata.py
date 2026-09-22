@@ -26,22 +26,6 @@ def t2t(hours, mins=None, sec=None):
 
 def get_date(*args, debug=0):
     
-    """
-    Example:
-    import icesatUtils
-    doy = icesatUtils.get_date(year, month, day)
-    # or
-    month, day = icesatUtils.get_date(year, doy)
-
-    """
-    def help():
-        print("""
-    Example:
-    import icesatUtils
-    doy = icesatUtils.get_date(year, month, day)
-    # or
-    month, day = icesatUtils.get_date(year, doy)
-            """)
 
     import datetime
 
@@ -90,13 +74,6 @@ def get_h5_meta(h5_file, meta='date', rtn_doy=False, rtn_hms=True, file_start='A
         varies, but generally it's one value, unless 'hms' meta is chosen,
         in which case it is two values.
 
-    Example:
-        import icesatUtils
-        fn = DIR + '/ATL03_20181016000635_02650109_200_01.h5'
-        # or fn = 'ATL03_20181016000635_02650109_200_01.h5'
-        year, day_of_year = icesatUtils.get_h5_meta(fn, meta='date', rtn_doy=True)
-        version = icesatUtils.get_h5_meta(fn, meta='version')
-        release = icesatUtils.get_h5_meta(fn, meta='release')
     """
 
     h5_file = os.path.basename(h5_file) # h5_file.split('/')[-1]

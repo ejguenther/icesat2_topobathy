@@ -4,9 +4,9 @@ from scipy.interpolate import RegularGridInterpolator, griddata
 from scipy import ndimage
 import time
 
-def create_interpolator(df_als, grid_resolution=1.0, ground_only=True):
+def create_interpolator(df_als, grid_resolution=1.0, ground_only=True, ground_class = 2):
     if ground_only:
-        df_als = df_als[df_als['classification'] == 2]
+        df_als = df_als[df_als['classification'] == ground_class]
         
     at_coords = df_als['alongtrack'].values
     xt_coords = df_als['crosstrack'].values
