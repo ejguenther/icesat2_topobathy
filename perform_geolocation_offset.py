@@ -23,7 +23,7 @@ from utils.create_las_extent import create_gdf_las_extent
 
 # IS2 File Configuration
 IS2_DIR = '/home/ejg2736/network_drives/walker/exports/nfs_share/Users/ajm7578/CornerCube/version6_test'
-IS2_FILENAME = 'processed_ATL03_20190531234041_09730306_006_02.h5'
+IS2_FILENAME = 'processed_ATL03_20190928175636_00280506_006_02.h5'
 IS2_FILEPATH = os.path.join(IS2_DIR, IS2_FILENAME)
 
 # Define the ground track of interest (e.g., 'gt1l', 'gt1r', 'gt2l', 'gt2r', 'gt3l', 'gt3r')
@@ -51,18 +51,8 @@ def main():
     # 1. Read the Extent File
     if not os.path.exists(EXTENT_FILE):
         print(f"Warning: Extent file not found at {EXTENT_FILE}.")
-        print(f"Generating extent file from {ALS_DIR}...")
-        from utils.create_las_extent import find_files
-        las_files = find_files(ALS_DIR, ['las', 'laz'])
-        if not las_files:
-            print(f"Error: No LAS/LAZ files found in {ALS_DIR}.")
-            return
-        extent_gdf = create_gdf_las_extent(las_files, num_processes=None)
-        if extent_gdf is not None:
-            extent_gdf.to_file(EXTENT_FILE, driver='GPKG')
-        else:
-            print("Error: Could not generate extent DataFrame. Exiting.")
-            return
+        extent_gdf = create_gdf_las_extent(ALS_DIR, num_processes=None)
+        extent_gdf.to_file(EXTENT_FILE, driver='GPKG')
     
     print(f"Loading extent from {EXTENT_FILE}...")
     extent_gdf = gpd.read_file(EXTENT_FILE)
@@ -82,7 +72,7 @@ def main():
     else:
         print("Creating new ALS swath from points. This may take a while...")
         os.makedirs(ALS_OUTDIR, exist_ok=True)
-        als_swath = create_als_swath(extent_gdf, df_ph)
+        als_swath = create_als_swath(extent_gdf, df_ph, num_workers = 1)
         
         print("Transforming ALS swath datums/projections...")
         als_swath = transform_als_swath(
@@ -98,14 +88,14 @@ def main():
 
     # 4. Create Surface Interpolator
     print("Creating ALS surface interpolator (resolution: 1m)...")
-    als_surface_interpolator = create_interpolator(als_swath, grid_resolution=1)
+    als_surface_interpolator = create_interpolator(als_swath, grid_resolution=1, ground_only=True, ground_class = 9)
 
     # 5. Calculate Geolocation Offset
     print("Calculating optimal geolocation offset using brute force search...")
     
     # Filter for valid photons (class 1 often denotes ground/canopy photons of interest, 
     # adjust if atl08_class definitions differ for your specific dataset)
-    valid_photons = df_ph[df_ph.atl08_class == 1]
+    valid_photons = df_ph[df_ph.signal_conf_ph1 > 3]
     
     if len(valid_photons) == 0:
         print("Error: No valid photons (atl08_class == 1) found in the dataset.")

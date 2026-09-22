@@ -1,5 +1,27 @@
-h5py
 numpy
 pandas
 geopandas
 shapely
+pyproj
+fiona
+rasterio
+h5py
+laspy
+scipy
+scikit-learn
+joblib
+geopy
+matplotlib
+opencv-python
+Pillow
+requests
+tqdm
+PyYAML
+
+# Needed to run the notebooks (demo.ipynb, footprint_analysis.ipynb, etc.)
+jupyter
+ipywidgets
+
+# Imported by utils/metadata.py but not a published package;
+# install from its source separately.
+# icesatUtils

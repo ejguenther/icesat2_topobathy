@@ -96,92 +96,107 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
     Processes a single lidar tile to extract points along the ICESat-2 track.
     This function is designed to be run in parallel.
     """
-    try:
-        file_name, tile_geom = tile_info
-        # file_name = tile_info.file_name
-        # tile_geom = tile_info.geometry.buffer(100)
-        base_name = os.path.basename(file_name)
-        
-        # 1. Read and project lidar data
-        las = laspy.read(file_name)
-        transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
-        x_coords, y_coords = transformer.transform(las.x[::DECIMATION], las.y[::DECIMATION])
-        points_xy = np.column_stack((x_coords, y_coords))
-        
-        # Read other las info to close the lasfile
-        z = np.array(las.z)
-        classification = np.array(las.classification)
-        
-        # 2. Trim the ICESat-2 line to the buffered tile extent for local analysis
-        trimmed_line = is2_line.intersection(tile_geom.buffer(BBOX_BUFFER))
-        if trimmed_line.is_empty:
-            return pd.DataFrame() # Return empty if no intersection
+    # try:
+    file_name, tile_geom = tile_info
+    # file_name = tile_info.file_name
+    # tile_geom = tile_info.geometry.buffer(100)
+    base_name = os.path.basename(file_name)
     
-        # 3. Perform a fast bounding box pre-filter on lidar points
-        min_x, min_y, max_x, max_y = trimmed_line.bounds
-        bbox_filter = (
-            (points_xy[:, 0] >= min_x - BBOX_BUFFER) & (points_xy[:, 0] <= max_x + BBOX_BUFFER) &
-            (points_xy[:, 1] >= min_y - BBOX_BUFFER) & (points_xy[:, 1] <= max_y + BBOX_BUFFER)
-        )
-        candidate_points_xy = points_xy[bbox_filter]
-        if len(candidate_points_xy) == 0:
-            return pd.DataFrame()
+    # 1. Read and project lidar data
+    las = laspy.read(file_name)
+    transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
+    x_coords, y_coords = transformer.transform(las.x[::DECIMATION], las.y[::DECIMATION])
+    points_xy = np.column_stack((x_coords, y_coords))
     
-        # 4. Calculate signed cross-track distance and filter
-        crosstrack_dist = estimate_signed_crosstrack(candidate_points_xy, trimmed_line)
-        crosstrack_mask = np.abs(crosstrack_dist) < CROSSTRACK_LIMIT
-        
-        final_points_xy = candidate_points_xy[crosstrack_mask]
-        if len(final_points_xy) == 0:
-            return pd.DataFrame()
-            
-        # 5. Get vertices of the ICESat-2 line that are within the tile's buffered extent
-        polygon_path = Path(np.array(tile_geom.buffer(BBOX_BUFFER).exterior.coords))
-        original_vertices = np.vstack((is2_x, is2_y)).T
-        is_inside_mask = polygon_path.contains_points(original_vertices)
-        
-        trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
-        trimmed_is2_at = is2_at[is_inside_mask]
-        trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
-        
-        # 6. Calculate along-track distance for the final points
-        if len(final_points_xy) > 0:
-            alongtrack_dist = estimate_alongtrack(final_points_xy, trimmed_line_from_vertices, 
-                                                  trimmed_is2_x, trimmed_is2_y, trimmed_is2_at)
-        
+    # Read other las info to close the lasfile
+    z = np.array(las.z)
+    classification = np.array(las.classification)
+    intensity = np.array(las.intensity)
+    number_of_returns = np.array(las.number_of_returns)
+    return_num = np.array(las.return_num)
+    # scan_angles = np.array(las.scan_angle)
+
+
+
+    # 2. Trim the ICESat-2 line to the buffered tile extent for local analysis
+    trimmed_line = is2_line.intersection(tile_geom.buffer(BBOX_BUFFER))
+    if trimmed_line.is_empty:
+        return pd.DataFrame() # Return empty if no intersection
+
+    # 3. Perform a fast bounding box pre-filter on lidar points
+    min_x, min_y, max_x, max_y = trimmed_line.bounds
+    bbox_filter = (
+        (points_xy[:, 0] >= min_x - BBOX_BUFFER) & (points_xy[:, 0] <= max_x + BBOX_BUFFER) &
+        (points_xy[:, 1] >= min_y - BBOX_BUFFER) & (points_xy[:, 1] <= max_y + BBOX_BUFFER)
+    )
+    candidate_points_xy = points_xy[bbox_filter]
+    if len(candidate_points_xy) == 0:
+        return pd.DataFrame()
+
+    # 4. Calculate signed cross-track distance and filter
+    crosstrack_dist = estimate_signed_crosstrack(candidate_points_xy, trimmed_line)
+    crosstrack_mask = np.abs(crosstrack_dist) < CROSSTRACK_LIMIT
     
-            # 7. Create the final DataFrame for this tile
-            df_tile = pd.DataFrame({
-                'x': final_points_xy[:, 0],
-                'y': final_points_xy[:, 1],
-                'z': z[::DECIMATION][bbox_filter][crosstrack_mask],
-                'classification': classification[::DECIMATION][bbox_filter][crosstrack_mask],
-                'crosstrack': crosstrack_dist[crosstrack_mask],
-                'alongtrack': alongtrack_dist,
-                'file': base_name
-            })
-        else:
-            # 7. Create the final DataFrame for this tile
-            df_tile = pd.DataFrame({
-                'x': [],
-                'y': [],
-                'z': [],
-                'classification': [],
-                'crosstrack': [],
-                'alongtrack': [],
-                'file': []
-            })
-    except:
-        print(f"Failed to process tile: {base_name}")
+    final_points_xy = candidate_points_xy[crosstrack_mask]
+    if len(final_points_xy) == 0:
+        return pd.DataFrame()
+        
+    # 5. Get vertices of the ICESat-2 line that are within the tile's buffered extent
+    polygon_path = Path(np.array(tile_geom.buffer(BBOX_BUFFER).exterior.coords))
+    original_vertices = np.vstack((is2_x, is2_y)).T
+    is_inside_mask = polygon_path.contains_points(original_vertices)
+    
+    trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
+    trimmed_is2_at = is2_at[is_inside_mask]
+    trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
+    
+    # 6. Calculate along-track distance for the final points
+    if len(final_points_xy) > 0:
+        alongtrack_dist = estimate_alongtrack(final_points_xy, trimmed_line_from_vertices, 
+                                                trimmed_is2_x, trimmed_is2_y, trimmed_is2_at)
+    
+
+        # 7. Create the final DataFrame for this tile
+        df_tile = pd.DataFrame({
+            'x': final_points_xy[:, 0],
+            'y': final_points_xy[:, 1],
+            'z': z[::DECIMATION][bbox_filter][crosstrack_mask],
+            'classification': classification[::DECIMATION][bbox_filter][crosstrack_mask],
+            'intensity': intensity[::DECIMATION][bbox_filter][crosstrack_mask],
+            'number_of_returns': number_of_returns[::DECIMATION][bbox_filter][crosstrack_mask],
+            'return_num': return_num[::DECIMATION][bbox_filter][crosstrack_mask],
+            # 'scan_angles': scan_angles[::DECIMATION][bbox_filter][crosstrack_mask],
+            'crosstrack': crosstrack_dist[crosstrack_mask],
+            'alongtrack': alongtrack_dist,
+            'file': base_name
+        })
+    else:
+        # 7. Create the final DataFrame for this tile
         df_tile = pd.DataFrame({
             'x': [],
             'y': [],
             'z': [],
             'classification': [],
+            'intensity': [],
+            'number_of_returns': [],
+            'return_num': [],
+            # 'scan_angles': [],
             'crosstrack': [],
             'alongtrack': [],
             'file': []
         })
+    # except:
+    #     print(f"Failed to process tile: {base_name}")
+    #     df_tile = pd.DataFrame({
+    #         'x': [],
+    #         'y': [],
+    #         'z': [],
+    #         'classification': [],
+    #         'intensity': [],
+    #         'crosstrack': [],
+    #         'alongtrack': [],
+    #         'file': []
+    #     })
     return df_tile
 
 def create_als_swath(extent_gdf, df_seg, num_workers = 8):
@@ -334,6 +349,7 @@ def get_als_swath_and_transform(
     if len(als_swath) == 0:
         return None
 
+    import pdb; pdb.set_trace()
     als_swath = transform_als_swath(als_swath, 
     utm_epsg, 
     source_geoid_file,
