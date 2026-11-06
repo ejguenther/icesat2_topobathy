@@ -1,68 +1,52 @@
 # icesat2_topobathy — agent orientation
 
-Research codebase comparing **ICESat-2** satellite lidar (ATL03 photon data,
-ATL08 land/canopy product, ATL24 bathymetry product) against **airborne
-lidar (ALS)** reference data, for a Florida mangrove/coastal topobathy
-accuracy study. Current focus (the `footprint` work, now merged to `main`)
-is estimating and correcting **geolocation offsets** between ICESat-2 and
-ALS using building rooftops/footprints as control features.
+Research codebase comparing **ICESat-2** photon data (ATL03 / ATL08 / ATL24)
+with **airborne lidar (ALS)**. The reusable code is the installable package
+**`phoreal`** (`src/phoreal/`, version 4.x, the successor to the older PhoREAL).
+Experiment-specific code lives in `projects/`.
 
-## Core pipeline
+## Environment
 
-- **`main.py`** — the canonical pipeline. Per ATL03/ATL08/ATL24 file triple
-  and ground track: reads/aligns photon data (`utils.readers`) → filters to
-  a spatial extent → geoid-corrects heights (EGM2008) → aggregates photons
-  into along-track segments (`utils.analysis`, driven by the
-  `ATL_AGG_CONFIG`/`ATL08_AGG_CONFIG`/`ALS_AGG_CONFIG` recipes at the top of
-  the file) → pulls the matching ALS swath for the same corridor → merges →
-  writes parquet. Config-driven via `config.yaml`, with CLI overrides.
-- **`create_als_swath.py`** — an older near-duplicate of part of `main.py`'s
-  logic. Prefer `main.py` as the source of truth unless told otherwise.
+uv + Python 3.12: `uv sync --all-extras`, `uv run pytest`. Do not use the base
+conda env: it has the **old** phoreal 3.31.1 egg, which other repos
+(`~/dev/atl18_gridding`) still depend on.
 
-## `utils/` module map
+## Layout
 
-| File | Purpose |
+| Path | Purpose |
 |---|---|
-| `readers.py`, `processing.py` | Parse ATL03/08/24 HDF5 into merged photon-level DataFrames |
-| `analysis.py` | Aggregation stats (percentiles, canopy cover, PAI, etc.) |
-| `datum_transforms.py`, `geographic_utils.py` | NAD83↔WGS84, geoid height lookups, UTM zone selection, geodesic distance |
-| `create_las_swath.py`, `create_las_area.py`, `create_las_extent.py`, `create_tif_extent.py`, `reference_extent.py` | Extract ALS point-cloud swaths/extents along an ICESat-2 ground track |
-| `geolocation.py` | Grid interpolation + MAE cost function for geolocation-offset optimization |
-| `building_processing.py` | Finds buildings intersected by an IS2 track, fits edges (RANSAC/DBSCAN) for footprint-based offset correction |
-| `metadata.py` | File-matching / attribute helpers (also does a lazy `import icesatUtils` — see Gotchas) |
-| `plotter.py` | Along-track classification plots |
-| `lidar_processing_draft.py` | Explicitly a draft/WIP file — not part of the stable pipeline |
+| `src/phoreal/io/` | `readers`, `processing`, `metadata`: parse ATL03/08/24 HDF5 into photon DataFrames |
+| `src/phoreal/geo/` | `datum_transforms` (NAD83↔WGS84, geoid lookups), `geographic_utils` (UTM zone, distances) |
+| `src/phoreal/als/` | `swath` (ALS swath along a track), `las_extent` / `tif_extent` / `reference_extent` / `area` (tile extents, target lookups), `lidar_processing_draft` (WIP) |
+| `src/phoreal/analysis.py`, `agg_configs.py` | Aggregation stats and the ATL/ATL08/ALS recipes |
+| `src/phoreal/geolocation.py` | Grid interpolation + MAE cost for offset optimization |
+| `src/phoreal/plotting.py` | Along-track plots (often imported `as plotter`) |
+| `src/phoreal/config.py` | `load_config(path)` for per-folder `config.yaml` |
+| `scripts/run_pipeline.py` | Canonical config-driven pipeline (was `main.py`). `create_als_swath.py` is an older near-duplicate |
+| `examples/` | Demo notebooks, `quick_plot.py` |
+| `projects/footprint/` | Building-footprint geolocation work (ForestSat26): `building_processing.py`, batch/offset scripts, notebooks |
+| `projects/fl_mangrove_topobathy/` | Config for `scripts/run_pipeline.py` (Florida AOI) |
+| `projects/atl24_labels/` | `label_check.py`: ATL24 label CSV QA |
+| `projects/planet_timelapse/` | Unrelated Planet Labs download/timelapse utility |
 
-## Standalone scripts
+Dependency rule: `projects/` may import `phoreal`, but `phoreal` never imports from `projects/`.
 
-- `perform_geolocation_offset.py` / `batch_process_footprints.py` — solve
-  for the IS2↔ALS geolocation offset via `scipy.optimize` (single file vs.
-  batch across many).
-- `label_check.py` — QA scan of ATL24 bathymetry training-label CSVs.
-- `planet_lab_download.py` / `planet_lab_timelapse.py` — unrelated side
-  utility: downloads Planet Labs imagery and builds a timelapse video.
-- `quick_plot.py` — ad hoc plotting sandbox.
+## Rules
 
-## Notebooks (interactive front end)
+- **No machine paths in tracked files** (public repo). Paths go in a
+  gitignored `config.yaml`, with a tracked `config.example.yaml` template next to it.
+  Library functions take paths as arguments.
+- Notebooks: outputs are stripped on commit by the nbstripout filter
+  (`.gitattributes`). Run notebooks from their own folder.
+- `local/` (gitignored) keeps the old `__main__` run-history blocks removed
+  from `phoreal/als/*`.
 
-`demo.ipynb`, `demo_ATL08_30m_segment.ipynb`, `footprint_analysis.ipynb`,
-`footprint_esf.ipynb`, `footprint_plots.ipynb`, `rvg_example.ipynb`.
+## Known issues (not yet fixed)
 
-## Config/data
-
-`config.yaml` points to absolute, machine-specific network-drive paths
-(Florida AOI, Everglades extent, geoid grids) — not portable off this
-machine as-is.
-
-## Gotchas
-
-- `utils/metadata.py` does `import icesatUtils` inside two functions — a
-  local/internal module, not on PyPI, so it's **not** in `requirements.txt`.
-  Only breaks if those specific functions are called.
-- `requirements.txt` and `.gitignore` were previously stale/missing; both
-  have been fixed (17 third-party packages + jupyter deps; ignores
-  `__pycache__/`, `.ipynb_checkpoints/`, and generated data artifacts). Don't
-  redo this — check them if a new import is added instead.
-- Working tree accumulates generated artifacts (`.gpkg`, `.kml`, `.pqt`,
-  `outputs/`, `data/`, `als_swaths/`) — these are gitignored outputs, not
-  source, and shouldn't be treated as reference data.
+- `als/las_extent`, `tif_extent` and `reference_extent` are copy-paste forks
+  (`tif_extent` ≡ `reference_extent` apart from the removed `__main__`).
+  Merging them is pending.
+- `phoreal/als/swath.py` has a leftover `import pdb; pdb.set_trace()` in the
+  function that creates and transforms the swath.
+- `phoreal/io/metadata.py` lazily imports `icesatUtils`, an internal module that
+  isn't installed.
