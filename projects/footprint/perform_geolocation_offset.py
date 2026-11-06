@@ -3,6 +3,7 @@ Script to calculate the geolocation offset of ICESat-2 (IS2) data relative to Ai
 """
 
 import os
+from pathlib import Path
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point
@@ -17,13 +18,17 @@ from phoreal.als.swath import create_als_swath, transform_als_swath
 from phoreal.geo.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
 from phoreal.geolocation import create_interpolator, calculate_mae_cost
 from phoreal.als.las_extent import create_gdf_las_extent
+from phoreal.config import load_config
 
 # --------------------------------------------------------------------------- #
 # CONFIGURATION - Set these variables before running
 # --------------------------------------------------------------------------- #
 
+# Paths come from the 'white_sands' section of config.yaml (gitignored)
+_cfg = load_config(Path(__file__).with_name("config.yaml"))['white_sands']
+
 # IS2 File Configuration
-IS2_DIR = '/home/ejg2736/network_drives/walker/exports/nfs_share/Users/ajm7578/CornerCube/version6_test'
+IS2_DIR = _cfg['is2_dir']
 IS2_FILENAME = 'processed_ATL03_20190928175636_00280506_006_02.h5'
 IS2_FILEPATH = os.path.join(IS2_DIR, IS2_FILENAME)
 
@@ -31,13 +36,13 @@ IS2_FILEPATH = os.path.join(IS2_DIR, IS2_FILENAME)
 GT = 'gt2r'
 
 # Extent file (GeoPackage containing processing area)
-EXTENT_FILE = '/home/ejg2736/dev/icesat2_topobathy/data/wsmr_rel006.gpkg'
+EXTENT_FILE = _cfg['extent_file']
 
 # ALS configuration
-ALS_DIR = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/WhiteSands_Analysis/WSMR_Lidar/ir_1'
-ALS_GEOID_FILE = '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif'
+ALS_DIR = _cfg['als_dir']
+ALS_GEOID_FILE = _cfg['als_geoid_file']
 ALS_EPSG = 'EPSG:32613' # UTM zone of the ALS data
-ALS_OUTDIR = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/als_swaths'
+ALS_OUTDIR = _cfg['als_outdir']
 
 # Search Grid Configuration for Offset Optimization (start, stop, step in meters)
 SEARCH_GRID = (slice(-10, 10, 0.5), slice(-10, 10, 0.5))

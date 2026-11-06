@@ -1,0 +1,5 @@
+# Copy to config.yaml (gitignored) and fill in paths for your machine.
+florida_atl03_dir: "/path/to/ICESat-2/REL006/florida_aoi/atl03"
+florida_atl08_dir: "/path/to/ICESat-2/REL006/florida_aoi/atl08"
+florida_atl24_dir: "/path/to/ICESat-2/REL006/florida_aoi/atl24"
+download_dir: "/path/to/downloads"   # quick_plot.py

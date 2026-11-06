@@ -3,7 +3,7 @@
 """
 Created on Fri May 23 08:37:49 2025
 
-@author: ejg2736
+@author: ejguenther
 """
 
 import numpy as np

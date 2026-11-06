@@ -4,8 +4,9 @@ import numpy as np
 from PIL import Image
 
 # --- Configurations ---
-input_dir = './lovers_key_time_series/images'
-output_video = 'lovers_key_timelapse.mp4'
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+input_dir = os.path.join(DATA_DIR, 'lovers_key_time_series', 'images')
+output_video = os.path.join(DATA_DIR, 'lovers_key_timelapse.mp4')
 
 # Target dimensions (Requirement 1)
 TARGET_WIDTH = 912

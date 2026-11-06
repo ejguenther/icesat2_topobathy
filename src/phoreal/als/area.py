@@ -3,7 +3,7 @@
 """
 Created on Fri Sep 12 09:52:12 2025
 
-@author: ejg2736
+@author: ejguenther
 """
 
 import laspy
@@ -127,88 +127,3 @@ def process_gedi_point(row, extent_gdf):
     except Exception as e:
         print(f"An error occurred for point at index {row.name}: {e}")
         return np.nan
-
-if __name__ == '__main__':
-    import pandas as pd
-    import numpy as np
-    import geopandas as gpd
-    from shapely.geometry import Point, Polygon
-    from tqdm import tqdm
-    from joblib import Parallel, delayed
-    # Using "if __name__ == '__main__':" is good practice for parallel scripts
-
-    # Read las extent
-    extent_gpkg = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
-    extent_gdf = gpd.read_file(extent_gpkg)
-
-    # Read GEDI files
-    gedi_csv = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/GEDI_Mangrove_Height.csv'
-    gedi_csv = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/GEDI_Mangrove_Height_filtered_only.csv'
-    gedi_df = pd.read_csv(gedi_csv)
-
-    # Filter by GEDI Mangrove Heights within ALS Data
-    gedi_gdf = gpd.GeoDataFrame(gedi_df, geometry=gpd.points_from_xy(gedi_df.lon_lowestmode, gedi_df.lat_lowestmode), crs="EPSG:4326")
-
-    filtered_gedi_gdf = gpd.sjoin(
-        gedi_gdf,
-        extent_gdf,
-        how="inner",
-        predicate='intersects'
-    )
-
-    # Compute GEDI in parallel
-    print("Processing GEDI points in parallel...")
-    rel_height_list = Parallel(n_jobs=7)(
-        delayed(process_gedi_point)(row, extent_gdf)
-        for _, row in tqdm(filtered_gedi_gdf.iterrows(), total=len(filtered_gedi_gdf))
-    )
-    
-    # Add results to the GeoDataFrame
-    filtered_gedi_gdf['als_98'] = rel_height_list
-    
-    # Save the output
-    print("Saving results...")
-    filtered_gedi_gdf.to_file('/home/ejg2736/dev/icesat2_topobathy/gedi_als5.gpkg', driver='GPKG')
-    print("Done!")
-
-
-# if __name__ == "__main__":
-#     import geopandas as gpd
-#     from shapely.geometry import Point, Polygon
-#     from tqdm import tqdm
-    
-#     # Read las extent
-#     extent_gpkg = '/home/ejg2736/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg'
-#     extent_gdf = gpd.read_file(extent_gpkg)    
-    
-#     # Read GEDI files
-#     gedi_csv = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/mangrove_fl/GEDI_Mangrove_Height.csv'
-#     gedi_df = pd.read_csv(gedi_csv)
-    
-#     # Filter by GEDI Mangrove Heights within ALS Data
-#     gedi_gdf = gpd.GeoDataFrame(gedi_df, geometry=gpd.points_from_xy(gedi_df.lon_lowestmode, gedi_df.lat_lowestmode), crs="EPSG:4326")
-
-
-#     filtered_gedi_gdf = gpd.sjoin(
-#         gedi_gdf,          # The points you want to filter
-#         extent_gdf,        # The polygons to filter with
-#         how="inner",         # Only keep points that intersect
-#         predicate='intersects' # The spatial relationship
-#     )
-    
-#     # Compute GEDI
-#     rel_height_list = []
-#     for i in tqdm(range(0,len(filtered_gedi_gdf))):
-#         df_als = get_als_from_target(extent_gdf, filtered_gedi_gdf.iloc[i].lon_lowestmode,
-#                                      filtered_gedi_gdf.iloc[i].lat_lowestmode, radius = 30)
-        
-#         df_als = df_als[df_als.c < 3]
-#         ground_height = np.median(df_als.z[df_als.c == 2])
-#         height_98 = np.percentile(df_als.z,98)    
-#         rel_height = height_98 - ground_height
-#         rel_height_list.append(rel_height)
-#     filtered_gedi_gdf['als_98'] = rel_height_list
-    
-#     filtered_gedi_gdf.to_file('/home/ejg2736/dev/icesat2_topobathy/gedi_als.gpkg')
-    
-    

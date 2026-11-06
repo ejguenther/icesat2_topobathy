@@ -17,6 +17,9 @@ from phoreal import plotting as plotter
 from phoreal.als.swath import create_als_swath, transform_als_swath
 from phoreal.geo.datum_transforms import convert_3d_nad83_to_wgs84
 from phoreal.geo.datum_transforms import get_geoid_height
+from phoreal.config import load_config
+
+cfg = load_config(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml'))
 
 ###
 import geopandas as gpd
@@ -25,7 +28,7 @@ import fiona  # <-- 1. Import fiona directly
 
 # Define ATL03 File
 aoi = 'Finland'
-atl03_dir = '/path/to/home/Downloads'
+atl03_dir = cfg['download_dir']
 #atl03_name = 'ATL03_20230623222806_00572006_007_01.h5' # Maine
 # atl03_name = 'ATL03_20200212094736_07280607_007_01.h5' # Flordia
 # atl03_name = 'ATL03_20220921231443_00191701_007_01.h5' #PuertoRico1
@@ -40,7 +43,7 @@ atl03_name = 'ATL03_20190516155132_07390305_007_01.h5 ' # Finland
 atl03_file = os.path.join(atl03_dir, atl03_name)
 
 # Define ATL08 File
-atl08_dir = '/path/to/home/Downloads'
+atl08_dir = cfg['download_dir']
 #atl08_name = 'ATL08_20230623222806_00572006_007_01.h5' # Maine 
 # atl08_name = 'ATL08_20200212094736_07280607_007_01.h5' # Flordia
 # atl08_name = 'ATL08_20220921231443_00191701_007_01.h5' #PuertoRico1

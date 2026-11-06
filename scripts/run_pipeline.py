@@ -49,20 +49,26 @@ if __name__ == "__main__":
         with open(args.config, 'r') as file:
             config = yaml.safe_load(file)
 
-    # 1. Setup (Override YAML config with CLI args if provided)
-    base_dir = args.base_dir or config.get('base_dir', '/Data/ICESat-2/REL006/florida_aoi')
+    # 1. Setup (CLI args override YAML config; paths have no defaults)
+    def setting(name, default=None):
+        value = getattr(args, name) or config.get(name, default)
+        if value is None:
+            parser.error(f"'{name}' must be given via --{name} or in the --config YAML")
+        return value
+
+    base_dir = setting('base_dir')
     atl03_dir = os.path.join(base_dir, 'atl03')
     atl08_dir = os.path.join(base_dir, 'atl08')
     atl24_dir = os.path.join(base_dir, 'atl24')
-    
-    extent_gpkg = args.extent_gpkg or config.get('extent_gpkg', '/dev/crossover_analysis/fl_west_Everglades_laz_extent1.gpkg')
-    geoid_file = args.geoid_file or config.get('geoid_file', '/dev/geoid/BundleAll/egm08_1.gtx')
-    als_geoid_file = args.als_geoid_file or config.get('als_geoid_file', '/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif')
-    als_outdir = args.als_outdir or config.get('als_outdir', '/Data/workspace/IS2/mangrove_fl/als')
-    df_outdir = args.df_outdir or config.get('df_outdir', '/Data/workspace/IS2/mangrove_fl/')
-   
-    target_res = args.target_res or config.get('target_res', 30)
-    gt_list = args.gt_list or config.get('gt_list', ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l'])
+
+    extent_gpkg = setting('extent_gpkg')
+    geoid_file = setting('geoid_file')
+    als_geoid_file = setting('als_geoid_file')
+    als_outdir = setting('als_outdir')
+    df_outdir = setting('df_outdir')
+
+    target_res = setting('target_res', 30)
+    gt_list = setting('gt_list', ['gt1r','gt1l','gt2r','gt2l','gt3r','gt3l'])
 
     # 2. File Discovery
     atl24_list = os.listdir(atl24_dir)

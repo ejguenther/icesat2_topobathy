@@ -4,8 +4,11 @@ import time
 import os
 
 # --- Configurations ---
-PLANET_API_KEY = "" #deleted key for now
-out_dir = 'lovers_key_time_series'
+# Set your key in the environment, never in this file:  export PLANET_API_KEY=...
+PLANET_API_KEY = os.environ.get("PLANET_API_KEY")
+if not PLANET_API_KEY:
+    raise SystemExit("Set the PLANET_API_KEY environment variable first.")
+out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'lovers_key_time_series')
 
 session = requests.Session()
 session.auth = (PLANET_API_KEY, "")
@@ -155,4 +158,4 @@ for order_id in order_ids:
             print(f"Order status is '{status}'. Waiting 30 seconds...")
             time.sleep(30)
 
-print("\nAll downloads completed successfully! Your data is ready in 'lovers_key_time_series'.")
+print(f"\nAll downloads completed successfully! Your data is ready in '{out_dir}'.")

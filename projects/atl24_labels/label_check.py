@@ -1,9 +1,14 @@
+"""Scan ATL24 training-label CSVs and print the unique 'label' values in each.
+
+Usage: python label_check.py /path/to/ATL24/training_data/labeled
+"""
+import argparse
 from pathlib import Path
 import pandas as pd
 
-# Set the path to your folder containing the CSVs
-# (Use '.' for the current directory, or provide the full path like 'C:/data' or '/user/data')
-FOLDER_PATH = Path("/home/ejg2736/network_drives/walker/exports/nfs_share/Data/ATL24/training_data/labeled")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("folder", type=Path, help="Folder containing the labeled .csv files")
+FOLDER_PATH = parser.parse_args().folder
 
 # Find all .csv files in the directory
 csv_files = list(FOLDER_PATH.glob("*.csv"))

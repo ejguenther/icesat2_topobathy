@@ -204,7 +204,10 @@ def geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile):
     gdf.to_file(output_shapefile, driver='GPKG')
     print(f"Shapefile created: {output_shapefile}")
 
-def get_als_from_target(wgs_extent, target_lon, target_lat, region = None):
+def get_als_from_target(wgs_extent, target_lon, target_lat, region = None,
+                        geoid_dir = None):
+    """geoid_dir: folder holding g2018_conus.gtx / g2012a_conus.gtx / egm08_1.gtx,
+    required when region is 'SJ', 'NC' or 'Finland'."""
     print('Region ' + region)
     target_point = Point(target_lon, target_lat)
     distance = 0.0001 * 2 # Define footprint length*2
@@ -307,19 +310,19 @@ def get_als_from_target(wgs_extent, target_lon, target_lat, region = None):
     try_3d = True
     if try_3d:
         if region == 'SJ':
-            geoid_file = '/home/ejg2736/data/geoid/BundleAll/g2018_conus.gtx'
+            geoid_file = os.path.join(geoid_dir, 'g2018_conus.gtx')
             data_dict['x'],data_dict['y'],data_dict['z'] = \
                 reproject_xyz(data_dict['x'],data_dict['y'],data_dict['z'],
                               crs_las,target_epsg, geoid_file)
         elif region == 'NC':
             crs_las = 'EPSG:6543'
             data_dict['z'] = data_dict['z'] * 0.3043
-            geoid_file = '/home/ejg2736/data/geoid/BundleAll/g2012a_conus.gtx'
+            geoid_file = os.path.join(geoid_dir, 'g2012a_conus.gtx')
             data_dict['x'],data_dict['y'],data_dict['z'] = \
                 reproject_xyz(data_dict['x'],data_dict['y'],data_dict['z'],
                               crs_las,target_epsg, geoid_file)
         elif region == 'Finland':
-            geoid_file = '/home/ejg2736/data/geoid/BundleAll/egm08_1.gtx'
+            geoid_file = os.path.join(geoid_dir, 'egm08_1.gtx')
             data_dict['x'],data_dict['y'],data_dict['z'] = \
                 reproject_xyz(data_dict['x'],data_dict['y'],data_dict['z'],
                               crs_las,target_epsg, geoid_file)
@@ -334,9 +337,7 @@ def get_als_from_target(wgs_extent, target_lon, target_lat, region = None):
 
 def reproject_xyz(x,y,z,epsg_in,epsg_out, geoid_file):
     if isinstance(epsg_in,str):
-        # geoid_file = '/home/ejg2736/data/geoid/BundleAll/g2018_conus.gtx' # SJ
-        # geoid_file = '/home/ejg2736/data/geoid/BundleAll/g2012a_conus.gtx' # NC
-        # geoid_file = '/home/ejg2736/data/geoid/BundleAll/egm08_1.gtx' # Finland
+        # geoid_file e.g. g2018_conus.gtx (SJ), g2012a_conus.gtx (NC), egm08_1.gtx (Finland)
         
         print('Warning: Hard coded is reference geoid')
         epsg_in = CRS(init=epsg_in,geoidgrids=geoid_file)
@@ -361,8 +362,8 @@ def reproject_xyz(x,y,z,epsg_in,epsg_out, geoid_file):
 
     return x, y, z
   
-def read_and_reproject_las(las_file):
-    geoid_file = '/home/ejg2736/data/geoid/BundleAll/g2018_conus.gtx'
+def read_and_reproject_las(las_file, geoid_file):
+    """geoid_file: vertical geoid grid, e.g. g2018_conus.gtx."""
 
     las = laspy.read(las_file)
     
@@ -378,76 +379,3 @@ def read_and_reproject_las(las_file):
     x, y, z = transformer_3d.transform(las.x,las.y,las.z)
     
     return x, y, z, las.classification
-
-if __name__ == "__main__":
-    # las_file = '/home/ejg2736/data/cross_over/als/san_joaquin1/Job1042832_37121_40_06.laz'
-    # las_file = '/home/ejg2736/data/als_test_area/USGS_LPC_CA_SanJoaquin_2021_A21_s62225w21125.laz'
-
-
-
-    # Test search
-    # las_dir = '/home/ejg2736/data/cross_over/als'
-    # las_dir = '/home/ejg2736/data/als_test_area'
-    # las_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/CA_SanJoaquin'
-    # las_dir = '/mnt/walker/exports/nfs_share/Data/OpenData/Finland/UTM/'
-    # las_list = find_files(las_dir,'laz')
-    # wgs_extent = create_gdf_las_extent(las_list, num_processes=5)
-    # target_lon = -121.15049352248671
-    # target_lat = 37.42051698302789
-    # target_lon = -121.66523557936257
-    # target_lat = 37.797649318848
-    # target_lon = -121.66523557936000
-    # target_lat = 37.797649318000
-    
-
-    # # # Convert coords to same coordinate system
-    # import time
-    # t1 = time.time()
-
-    # df_als = get_als_from_target(wgs_extent, target_lon, target_lat)
-    # t2 = time.time()
-    # print(t2-t1)
-    
-    # Example usage:
-    # folder_path = "/home/ejg2736/Desktop/Bigtex/exports/vol2/vol2/Data/OpenData/Finland/UTM_DTM"  # Replace with your folder path
-    # output_shapefile = "geotif_extents.shp"  # Replace with your desired output path
-    # output_shapefile = "geotif_extents.gpkg"  # Replace with your desired output path
-    
-    folder_path = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/Global/fabdem/zip_tiles'
-    output_shapefile = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/Global/fabdem/fabdem_tile_extents3.gpkg'
-
-    folder_path = '/home/ejg2736/data/austin_tx_lidar/files/'
-    output_shapefile = '/home/ejg2736/data/austin_tx_lidar/extent_file.gpkg'
-
-    folder_path = '/home/ejg2736/dev/SBD_tools/nc_comp_tiles_2019_v2'
-    output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file.gpkg'
-
-    folder_path = '/home/ejg2736/dev/SBD_tools/finland_comp_tiles_2019_v2'
-    output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_finland.gpkg'
-
-    folder_path = '/home/ejg2736/dev/SBD_tools/ca_comp_tiles_2019_v2'
-    output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_2019.gpkg'
-    
-    folder_path = '/mnt/spindrive_data/finland_20m/chm_98/'
-    output_shapefile = '/mnt/spindrive_data/finland_20m/finland_chm_98_extent.gpkg'
-    
-
-    folder_path = '/home/ejg2736/dev/atl18_gridding/misc/nc_comp_tiles_2019_v3'
-    output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_nc_v3.gpkg'
-
-    folder_path = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/AlphaEarth/las_extents/ref_rasters/fin/chm_100'
-    output_shapefile = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/AlphaEarth/las_extents/ref_rasters/nc/extent_fin_chm100.gpkg'
-
-    # folder_path = '/home/ejg2736/dev/atl18_gridding/misc/fin_comp_tiles_2019_v3'
-    # output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_fin_v3.gpkg'
-
-    # folder_path = '/home/ejg2736/dev/atl18_gridding/misc/ca_comp_tiles_2019_v3'
-    # output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_v3.gpkg'
-    
-    
-
-
-    
-    geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile)
-    
-    geotiff_gdf = gpd.read_file(output_shapefile)

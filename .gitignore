@@ -2,6 +2,10 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+.pytest_cache/
+
+# uv environment
+.venv/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -9,25 +13,27 @@ __pycache__/
 # OS
 .DS_Store
 
-# Generated/downloaded data and outputs (paths come from config.yaml / scripts,
-# not meant to be versioned)
+# Machine-specific settings: real paths live in config.yaml (never commit);
+# each folder tracks a config.example.yaml template instead.
+config.yaml
+
+# Local-only material (run history, scratch work, backups)
+local/
+scratch/
+
+# Data and outputs (matches at any depth, e.g. projects/footprint/data/)
 data/
 outputs/
 als_swaths/
-neon/
-scratch/
-lovers_key_time_series/
-lovers_key_time_series2/
 *.mp4
 
 # Geospatial / point-cloud data products
 *.gpkg
+*.gpkg-shm
+*.gpkg-wal
 *.kml
 *.laz
 *.las
 *.tif
 *.pqt
 *.parquet
-
-# uv environment
-.venv/

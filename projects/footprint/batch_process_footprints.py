@@ -32,19 +32,26 @@ from building_processing import (
 )
 
 
+from phoreal.config import load_config
+
 print("All imports complete.", flush=True)
 
 def main():
+    # Defaults come from the 'batch' section of config.yaml next to this script (gitignored)
+    _cfg = load_config(Path(__file__).with_name("config.yaml")).get('batch', {})
     parser = argparse.ArgumentParser(description="Batch process footprint edge analysis")
-    parser.add_argument('--data-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/austin_data', help="Directory containing ATL03 and ATL08 data")
-    parser.add_argument('--extent-file', type=str, default='/home/ejg2736/dev/icesat2_topobathy/data/austin_laz_bigtex.gpkg', help="Extent GeoPackage")
-    parser.add_argument('--geoid-file', type=str, default='/home/ejg2736/dev/geoid/agisoft/us_noaa_g2018u0.tif', help="ALS Geoid File")
-    parser.add_argument('--buildings-file', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/footprint/austin_bldgs.gpkg', help="Austin Buildings File")
-    parser.add_argument('--out-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/outputs6', help="Output Directory")
-    parser.add_argument('--als-swath-dir', type=str, default='/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/IS2/footprint_exp/als_swaths', help="Directory to cache ALS swaths")
+    parser.add_argument('--data-dir', type=str, default=_cfg.get('data_dir'), help="Directory containing ATL03 and ATL08 data")
+    parser.add_argument('--extent-file', type=str, default=_cfg.get('extent_file'), help="Extent GeoPackage")
+    parser.add_argument('--geoid-file', type=str, default=_cfg.get('geoid_file'), help="ALS Geoid File")
+    parser.add_argument('--buildings-file', type=str, default=_cfg.get('buildings_file'), help="Austin Buildings File")
+    parser.add_argument('--out-dir', type=str, default=_cfg.get('out_dir'), help="Output Directory")
+    parser.add_argument('--als-swath-dir', type=str, default=_cfg.get('als_swath_dir'), help="Directory to cache ALS swaths")
     parser.add_argument('--test-mode', action='store_true', help="Run in test mode")
     
     args = parser.parse_args()
+    missing = [k for k in ['data_dir','extent_file','geoid_file','buildings_file','out_dir','als_swath_dir'] if getattr(args, k) is None]
+    if missing:
+        parser.error(f"missing {missing}: pass as CLI flags or set under 'batch:' in config.yaml")
     
     # Ensure output directories exist
     os.makedirs(args.out_dir, exist_ok=True)

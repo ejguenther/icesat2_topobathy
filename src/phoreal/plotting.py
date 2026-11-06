@@ -3,7 +3,7 @@
 """
 Created on Fri Jun 20 15:11:06 2025
 
-@author: ejg2736
+@author: ejguenther
 """
 
 import matplotlib.pyplot as plt
