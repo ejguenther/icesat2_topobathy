@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Generated/downloaded data and outputs (paths come from config.yaml / scripts,
+# not meant to be versioned)
+data/
+outputs/
+als_swaths/
+neon/
+scratch/
+lovers_key_time_series/
+lovers_key_time_series2/
+*.mp4
+
+# Geospatial / point-cloud data products
+*.gpkg
+*.kml
+*.laz
+*.las
+*.tif
+*.pqt
+*.parquet
