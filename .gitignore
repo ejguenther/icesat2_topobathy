@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# uv environment
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# Machine-specific settings: real paths live in config.yaml (never commit);
+# each folder tracks a config.example.yaml template instead.
+config.yaml
+
+# Local-only material (run history, scratch work, backups)
+local/
+scratch/
+
+# Data and outputs (matches at any depth, e.g. projects/footprint/data/)
+data/
+outputs/
+als_swaths/
+*.mp4
+
+# Geospatial / point-cloud data products
+*.gpkg
+*.gpkg-shm
+*.gpkg-wal
+*.kml
+*.laz
+*.las
+*.tif
+*.pqt
+*.parquet

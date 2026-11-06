@@ -1,0 +1,34 @@
+# Copy to config.yaml (gitignored) and fill in paths for your machine.
+
+# --- notebooks (footprint_analysis / footprint_plots / footprint_esf / rvg_example) ---
+austin_atl_dir: "/path/to/austin_data"
+austin_extent_file: "/path/to/austin_laz_bigtex.gpkg"
+austin_buildings_file: "/path/to/austin_bldgs.gpkg"
+als_geoid_file: "/path/to/us_noaa_g2018u0.tif"
+als_swath_dir: "/path/to/als_swaths"
+als_swath_dir2: "/path/to/als_swaths2"
+las_export_dir: "/path/to/las"
+esf_hits_dir: "/path/to/outputs6"
+esf_hits_dir_v2: "/path/to/outputs2"
+neon_laz_dir: "/path/to/BONA_2024_7"
+neon_extent_file: "/path/to/neon_bona_2024_7_walker.gpkg"
+neon_atl_dir: "/path/to/neon"
+nasadem_dir: "/path/to/NASADEM_be"
+nasadem_extent_file: "/path/to/bigtex_nasadem.gpkg"
+
+# --- batch_process_footprints.py (CLI flags override) ---
+batch:
+  data_dir: "/path/to/austin_data"
+  extent_file: "/path/to/austin_laz_bigtex.gpkg"
+  geoid_file: "/path/to/us_noaa_g2018u0.tif"
+  buildings_file: "/path/to/austin_bldgs.gpkg"
+  out_dir: "/path/to/outputs6"
+  als_swath_dir: "/path/to/als_swaths"
+
+# --- perform_geolocation_offset.py (White Sands corner cube) ---
+white_sands:
+  is2_dir: "/path/to/version6_test"
+  extent_file: "/path/to/wsmr_rel006.gpkg"
+  als_dir: "/path/to/ir_1"
+  als_geoid_file: "/path/to/us_noaa_g2018u0.tif"
+  als_outdir: "/path/to/als_swaths"
