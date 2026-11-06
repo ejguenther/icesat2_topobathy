@@ -8,14 +8,15 @@ from shapely.geometry import Point
 import numpy as np
 
 # Import functions from main
-from main import ATL_AGG_CONFIG, ALS_AGG_CONFIG, ATL08_AGG_CONFIG
+from phoreal.agg_configs import ATL_AGG_CONFIG, ALS_AGG_CONFIG, ATL08_AGG_CONFIG
 
 # Import functions from the utils
-from utils import readers, analysis, processing
-from utils import plotter
-from utils.create_las_swath import create_als_swath, transform_als_swath
-from utils.datum_transforms import convert_3d_nad83_to_wgs84
-from utils.datum_transforms import get_geoid_height
+from phoreal.io import readers, processing
+from phoreal import analysis
+from phoreal import plotting as plotter
+from phoreal.als.swath import create_als_swath, transform_als_swath
+from phoreal.geo.datum_transforms import convert_3d_nad83_to_wgs84
+from phoreal.geo.datum_transforms import get_geoid_height
 
 ###
 import geopandas as gpd

@@ -18,9 +18,9 @@ from functools import partial
 from tqdm import tqdm
 import os
 
-from utils.geographic_utils import find_utm_zone_epsg
-from utils.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
-from utils.analysis import normalize_heights
+from phoreal.geo.geographic_utils import find_utm_zone_epsg
+from phoreal.geo.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
+from phoreal.analysis import normalize_heights
 
 
 # Constants for the analysis

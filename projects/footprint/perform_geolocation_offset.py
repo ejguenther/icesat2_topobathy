@@ -10,12 +10,13 @@ import numpy as np
 from scipy.optimize import minimize, brute, fmin
 
 # Import functions from main and utils
-from main import ATL_AGG_CONFIG, ALS_AGG_CONFIG, ATL08_AGG_CONFIG
-from utils import readers, analysis, processing, plotter
-from utils.create_las_swath import create_als_swath, transform_als_swath
-from utils.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
-from utils.geolocation import create_interpolator, calculate_mae_cost
-from utils.create_las_extent import create_gdf_las_extent
+from phoreal.agg_configs import ATL_AGG_CONFIG, ALS_AGG_CONFIG, ATL08_AGG_CONFIG
+from phoreal.io import readers, processing
+from phoreal import analysis, plotting as plotter
+from phoreal.als.swath import create_als_swath, transform_als_swath
+from phoreal.geo.datum_transforms import convert_3d_nad83_to_wgs84, get_geoid_height
+from phoreal.geolocation import create_interpolator, calculate_mae_cost
+from phoreal.als.las_extent import create_gdf_las_extent
 
 # --------------------------------------------------------------------------- #
 # CONFIGURATION - Set these variables before running

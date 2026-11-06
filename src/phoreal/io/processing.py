@@ -10,7 +10,7 @@ import numpy as np
 import h5py
 import pandas as pd
 from typing import Union
-from . import readers
+from phoreal.io import readers
 import scipy
 
 def add_atl08_metadata_to_segments(df_seg, df_atl08):

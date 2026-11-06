@@ -16,10 +16,11 @@ from shapely.geometry import Point
 import traceback
 
 print("Loading custom utils...", flush=True)
-from utils import readers, analysis, processing
-from utils.create_las_swath import create_als_swath, transform_als_swath, prepare_icesat2_track
-from utils.geolocation import calculate_mae_cost, create_interpolator
-from utils.building_processing import (
+from phoreal.io import readers, processing
+from phoreal import analysis
+from phoreal.als.swath import create_als_swath, transform_als_swath, prepare_icesat2_track
+from phoreal.geolocation import calculate_mae_cost, create_interpolator
+from building_processing import (
     find_intersected_buildings, 
     convert_buildings_to_atxt, 
     filter_grazing_hits,

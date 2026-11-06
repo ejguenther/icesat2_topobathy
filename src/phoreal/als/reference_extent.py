@@ -12,7 +12,7 @@ import glob
 from pyproj import Transformer, CRS
 from tqdm import tqdm
 import multiprocessing
-# from utils.geographic_utils import utm_zone_epsg, get_geoid_height
+# from phoreal.geo.geographic_utils import utm_zone_epsg, get_geoid_height
 
 def combine_dicts(dicts):
   """Combines multiple dictionaries into a single dictionary.
@@ -427,13 +427,26 @@ if __name__ == "__main__":
 
     folder_path = '/home/ejg2736/dev/SBD_tools/ca_comp_tiles_2019_v2'
     output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_2019.gpkg'
+    
+    folder_path = '/mnt/spindrive_data/finland_20m/chm_98/'
+    output_shapefile = '/mnt/spindrive_data/finland_20m/finland_chm_98_extent.gpkg'
+    
+
+    folder_path = '/home/ejg2736/dev/atl18_gridding/misc/nc_comp_tiles_2019_v3'
+    output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_nc_v3.gpkg'
+
+    folder_path = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/AlphaEarth/las_extents/ref_rasters/fin/chm_100'
+    output_shapefile = '/home/ejg2736/network_drives/walker/exports/nfs_share/Data/workspace/AlphaEarth/las_extents/ref_rasters/nc/extent_fin_chm100.gpkg'
+
+    # folder_path = '/home/ejg2736/dev/atl18_gridding/misc/fin_comp_tiles_2019_v3'
+    # output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_fin_v3.gpkg'
+
+    # folder_path = '/home/ejg2736/dev/atl18_gridding/misc/ca_comp_tiles_2019_v3'
+    # output_shapefile = '/home/ejg2736/dev/SBD_tools/extent_file_ca_v3.gpkg'
+    
+    
 
 
-    folder_path = '/mnt/spindrive_data/maine_20m/dtm'
-    output_shapefile = '/mnt/spindrive_data/maine_20m/maine_dtm_extent.gpkg'
-
-    folder_path = '/mnt/spindrive_data/california_20m/dtm'
-    output_shapefile = '/mnt/spindrive_data/california_20m/ca_dtm_extent.gpkg'
     
     geotiff_extents_to_shapefile_parallel(folder_path, output_shapefile)
     

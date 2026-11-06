@@ -9,9 +9,9 @@ Created on Fri Jun 20 10:33:35 2025
 import os
 import numpy as np
 import h5py
-from . import processing
+from phoreal.io import processing
 import pandas as pd
-from utils.geographic_utils import get_df_distance
+from phoreal.geo.geographic_utils import get_df_distance
 
 def __appendGlobalList(name):
     if name:

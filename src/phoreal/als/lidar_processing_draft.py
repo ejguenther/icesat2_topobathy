@@ -17,8 +17,8 @@ from matplotlib.path import Path
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
-# from utils.geographic_utils import find_utm_zone_epsg
-from geographic_utils import find_utm_zone_epsg
+# from phoreal.geo.geographic_utils import find_utm_zone_epsg
+from phoreal.geo.geographic_utils import find_utm_zone_epsg
 import os
 
 

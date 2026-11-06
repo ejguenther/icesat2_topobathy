@@ -3,7 +3,7 @@ from shapely.geometry import LineString
 import numpy as np
 import pandas as pd
 from shapely.geometry import Polygon
-from utils.create_las_swath import prepare_icesat2_track, estimate_alongtrack, estimate_signed_crosstrack
+from phoreal.als.swath import prepare_icesat2_track, estimate_alongtrack, estimate_signed_crosstrack
 from sklearn.linear_model import RANSACRegressor
 from sklearn.metrics import mean_absolute_error
 import numpy as np
