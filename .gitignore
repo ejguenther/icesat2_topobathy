@@ -28,3 +28,6 @@ lovers_key_time_series2/
 *.tif
 *.pqt
 *.parquet
+
+# uv environment
+.venv/
