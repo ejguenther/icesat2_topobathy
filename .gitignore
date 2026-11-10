@@ -37,3 +37,6 @@ als_swaths/
 *.tif
 *.pqt
 *.parquet
+
+# icepyx order bookkeeping
+.order_restart
