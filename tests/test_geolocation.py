@@ -108,3 +108,28 @@ def test_bootstrap_sigma_reflects_constraint(als_interp):
     zf = 100.0 + rng.normal(0, 0.1, at.size)
     res = estimate_offset(at, xt, zf, flat, n_bootstrap=15)
     assert max(res['boot_sigma_at'], res['boot_sigma_xt']) > 1.0 or res['boot_edge_frac'] > 0.2
+
+
+def test_bootstrap_nm_matches_grid(als_interp):
+    rng = np.random.default_rng(2)
+    at = np.sort(rng.uniform(100, 1400, 3000)); xt = np.zeros_like(at)
+    z = surface(at, xt) + rng.normal(0, 0.3, at.size)
+    g = estimate_offset(at, xt, z, als_interp, n_bootstrap=20, return_surface=False)
+    n = estimate_offset(at, xt, z, als_interp, n_bootstrap=20, return_surface=False,
+                        bootstrap_method='nm')
+    for k in ('boot_sigma_at', 'boot_sigma_xt'):
+        assert n[k] == pytest.approx(g[k], abs=0.15)
+
+
+def test_fast_bilinear_matches_regular_grid_interpolator(als_interp):
+    from phoreal.geolocation import fast_bilinear
+    from scipy.interpolate import RegularGridInterpolator
+    v = np.array(als_interp.values, dtype=float); v[100:110, 20:25] = np.nan
+    it = RegularGridInterpolator(als_interp.grid, v, method='linear', bounds_error=False,
+                                 fill_value=np.nan)
+    f = fast_bilinear(it)
+    assert f is not it
+    rng = np.random.default_rng(3)
+    pts = (rng.uniform(-80, 1600, 20000), rng.uniform(-50, 50, 20000))
+    pts[0][:3] = it.grid[0][[0, -1, 5]]; pts[1][:3] = it.grid[1][[0, -1, 7]]
+    assert np.allclose(f(pts), it(pts), equal_nan=True)

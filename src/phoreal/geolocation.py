@@ -192,6 +192,42 @@ def _valid_fraction(shift, at, xt, interpolator):
     return float(np.mean(~np.isnan(als_z))) if len(als_z) else 0.0
 
 
+def fast_bilinear(interpolator):
+    """
+    Equivalent of a 2D linear ``RegularGridInterpolator`` (bounds_error=False,
+    fill_value=nan) on a uniform grid, evaluated with plain numpy indexing.
+    Returns f((at, xt)) -> values, or the interpolator itself if it is not a
+    uniform linear 2D grid.
+    """
+    try:
+        ga, gx = interpolator.grid
+        vals = np.asarray(interpolator.values, dtype=np.float64)
+        if interpolator.method != 'linear' or vals.ndim != 2 or len(ga) < 2 or len(gx) < 2:
+            return interpolator
+        da, dx = np.diff(ga), np.diff(gx)
+        if not (np.allclose(da, da[0]) and np.allclose(dx, dx[0])):
+            return interpolator
+    except AttributeError:
+        return interpolator
+    a0, x0, sa, sx = ga[0], gx[0], da[0], dx[0]
+    na, nx = vals.shape
+
+    def f(pts):
+        a = (np.asarray(pts[0], dtype=np.float64) - a0) / sa
+        x = (np.asarray(pts[1], dtype=np.float64) - x0) / sx
+        out = np.full(a.shape, np.nan)
+        eps = 1e-9
+        ok = (a >= -eps) & (a <= na - 1 + eps) & (x >= -eps) & (x <= nx - 1 + eps)
+        a, x = np.clip(a[ok], 0, na - 1), np.clip(x[ok], 0, nx - 1)
+        i = np.minimum(np.floor(a).astype(np.int64), na - 2)
+        j = np.minimum(np.floor(x).astype(np.int64), nx - 2)
+        fa, fx = a - i, x - j
+        out[ok] = (vals[i, j] * (1 - fa) * (1 - fx) + vals[i + 1, j] * fa * (1 - fx)
+                   + vals[i, j + 1] * (1 - fa) * fx + vals[i + 1, j + 1] * fa * fx)
+        return out
+    return f
+
+
 def make_cost_function(at, xt, z, interpolator, fit_dz=False, min_valid_frac=None):
     """
     Returns cost(shift) -> float for the given photons.
@@ -207,6 +243,7 @@ def make_cost_function(at, xt, z, interpolator, fit_dz=False, min_valid_frac=Non
     xt = np.asarray(xt, dtype=float)
     z = np.asarray(z, dtype=float)
     n = len(z)
+    interpolator = fast_bilinear(interpolator)
 
     def cost(shift):
         als_z = interpolator((at + shift[0], xt + shift[1]))
@@ -250,13 +287,17 @@ def _quadratic_hessian(grid_at, grid_xt, J, i, j, half_width=2):
 
 def bootstrap_offset(at, xt, z, interpolator, center, n_bootstrap=30, block_m=100.0,
                      half_width=4.0, step=0.25, fit_dz=False, min_valid_frac=None,
-                     seed=0):
+                     seed=0, method='grid'):
     """
     Block bootstrap of the offset: resample along-track blocks of photons with
     replacement and re-solve on a local grid around ``center``.
 
     Blocks keep along-track correlation together, so the spread is not
     overstated the way photon-level resampling would be.
+
+    method: 'grid' searches a (2*half_width/step + 1)^2 grid around center;
+        'nm' runs Nelder-Mead from center (far fewer cost evaluations) and
+        counts a replicate as "on edge" if it ends more than half_width away.
 
     Returns (sigma_at, sigma_xt, corr, frac_on_edge): standard deviations (m),
     their correlation, and the fraction of replicates whose optimum hit the
@@ -277,6 +318,16 @@ def bootstrap_offset(at, xt, z, interpolator, center, n_bootstrap=30, block_m=10
         idx = np.concatenate([members[k] for k in pick])
         cost = make_cost_function(at[idx], xt[idx], z[idx], interpolator,
                                   fit_dz=fit_dz, min_valid_frac=min_valid_frac)
+        if method == 'nm':
+            from scipy.optimize import minimize
+            r = minimize(cost, x0=np.asarray(center, float), method='Nelder-Mead',
+                         options=dict(xatol=0.05, fatol=1e-4, maxiter=200,
+                                      initial_simplex=np.asarray(center, float) + np.array([[0, 0], [1.0, 0], [0, 1.0]])))
+            if not np.isfinite(r.fun):
+                continue
+            edge += bool(np.max(np.abs(r.x - np.asarray(center))) > half_width)
+            sols.append(tuple(r.x))
+            continue
         J = np.array([cost((a, x)) for a, x in zip(ga.ravel(), gx.ravel())]).reshape(ga.shape)
         if not np.isfinite(J).any():
             continue
@@ -293,7 +344,8 @@ def bootstrap_offset(at, xt, z, interpolator, center, n_bootstrap=30, block_m=10
 
 def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0.5)),
                     fit_dz=False, min_valid_frac=None, finish=True,
-                    return_surface=True, n_bootstrap=0, bootstrap_block_m=100.0):
+                    return_surface=True, n_bootstrap=0, bootstrap_block_m=100.0,
+                    bootstrap_method='grid', max_photons=None, seed=0):
     """
     Grid search (scipy.optimize.brute) + optional Nelder-Mead finish for the
     horizontal correction aligning photons (at, xt, z) to an ALS surface.
@@ -324,6 +376,11 @@ def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0
     at = np.asarray(at, dtype=float)
     xt = np.asarray(xt, dtype=float)
     z = np.asarray(z, dtype=float)
+    n_input = len(z)
+    if max_photons is not None and n_input > max_photons:
+        # fixed-seed subsample, kept in along-track order for the bootstrap blocks
+        keep = np.sort(np.random.default_rng(seed).choice(n_input, max_photons, replace=False))
+        at, xt, z = at[keep], xt[keep], z[keep]
     cost = make_cost_function(at, xt, z, interpolator, fit_dz=fit_dz,
                               min_valid_frac=min_valid_frac)
     ranges = tuple(slice(*r) for r in search)
@@ -373,13 +430,15 @@ def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0
         'second_min_ratio': second_cost / float(Jfinite[i, j]) if np.isfinite(second_cost) and Jfinite[i, j] > 0 else np.nan,
         'hess_aa': float(h_aa), 'hess_ax': float(h_ax), 'hess_xx': float(h_xx),
         'dz_opt': dz_opt,
-        'n_photons': int(len(z)),
+        'n_photons': int(n_input),
+        'n_photons_fit': int(len(z)),
     }
     if n_bootstrap and np.isfinite(fval):
         sa, sx, rho, edge = bootstrap_offset(at, xt, z, interpolator, x0,
                                              n_bootstrap=n_bootstrap,
                                              block_m=bootstrap_block_m, fit_dz=fit_dz,
-                                             min_valid_frac=min_valid_frac)
+                                             min_valid_frac=min_valid_frac,
+                                             method=bootstrap_method)
         out.update(boot_sigma_at=sa, boot_sigma_xt=sx, boot_corr=rho, boot_edge_frac=edge)
     if return_surface:
         out['surface'] = (grid_at, grid_xt, J)
