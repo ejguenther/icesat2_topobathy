@@ -39,6 +39,8 @@ def read_las_header(las_file):
     z_max = las.header.z_max
     creatation_date = las.header.creation_date
     parse_crs = las.header.parse_crs() 
+    point_count = las.header.point_count
+    point_format = las.header.point_format.id
     # print('2\n')
     # Read into dictionary
     las_dict = {"file_name":las_file,
@@ -49,7 +51,9 @@ def read_las_header(las_file):
             "z_min":z_min,
             "z_max":z_max,
             "creation_date":creatation_date,
-            "parse_crs":parse_crs}
+            "parse_crs":parse_crs,
+            "point_count":point_count,
+            "point_format":point_format}
     # print('read_las_header return\n')
     las.close()
 

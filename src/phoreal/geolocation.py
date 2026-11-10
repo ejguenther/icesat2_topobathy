@@ -248,9 +248,52 @@ def _quadratic_hessian(grid_at, grid_xt, J, i, j, half_width=2):
     return 2 * coef[3], coef[4], 2 * coef[5]
 
 
+def bootstrap_offset(at, xt, z, interpolator, center, n_bootstrap=30, block_m=100.0,
+                     half_width=4.0, step=0.25, fit_dz=False, min_valid_frac=None,
+                     seed=0):
+    """
+    Block bootstrap of the offset: resample along-track blocks of photons with
+    replacement and re-solve on a local grid around ``center``.
+
+    Blocks keep along-track correlation together, so the spread is not
+    overstated the way photon-level resampling would be.
+
+    Returns (sigma_at, sigma_xt, corr, frac_on_edge): standard deviations (m),
+    their correlation, and the fraction of replicates whose optimum hit the
+    local grid edge (if large, the sigmas are lower bounds).
+    """
+    at = np.asarray(at, float); xt = np.asarray(xt, float); z = np.asarray(z, float)
+    blocks = ((at - at.min()) // block_m).astype(int)
+    uniq = np.unique(blocks)
+    if len(uniq) < 3:
+        return np.nan, np.nan, np.nan, np.nan
+    members = [np.flatnonzero(blocks == b) for b in uniq]
+    offs = np.arange(-half_width, half_width + step / 2, step)
+    ga, gx = np.meshgrid(center[0] + offs, center[1] + offs, indexing='ij')
+    rng = np.random.default_rng(seed)
+    sols, edge = [], 0
+    for _ in range(n_bootstrap):
+        pick = rng.integers(0, len(members), len(members))
+        idx = np.concatenate([members[k] for k in pick])
+        cost = make_cost_function(at[idx], xt[idx], z[idx], interpolator,
+                                  fit_dz=fit_dz, min_valid_frac=min_valid_frac)
+        J = np.array([cost((a, x)) for a, x in zip(ga.ravel(), gx.ravel())]).reshape(ga.shape)
+        if not np.isfinite(J).any():
+            continue
+        i, j = np.unravel_index(np.nanargmin(np.where(np.isfinite(J), J, np.nan)), J.shape)
+        edge += i in (0, len(offs) - 1) or j in (0, len(offs) - 1)
+        sols.append((ga[i, j], gx[i, j]))
+    if len(sols) < 3:
+        return np.nan, np.nan, np.nan, np.nan
+    sols = np.array(sols)
+    sa, sx = sols.std(axis=0, ddof=1)
+    corr = float(np.corrcoef(sols.T)[0, 1]) if sa > 0 and sx > 0 else np.nan
+    return float(sa), float(sx), corr, edge / len(sols)
+
+
 def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0.5)),
                     fit_dz=False, min_valid_frac=None, finish=True,
-                    return_surface=True):
+                    return_surface=True, n_bootstrap=0, bootstrap_block_m=100.0):
     """
     Grid search (scipy.optimize.brute) + optional Nelder-Mead finish for the
     horizontal correction aligning photons (at, xt, z) to an ALS surface.
@@ -273,6 +316,8 @@ def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0
         hess_aa, hess_ax, hess_xx   curvature of the cost surface at the minimum
         dz_opt                      median residual at the optimum (vertical
                                     offset; profiled out if fit_dz)
+        boot_sigma_at/_xt, boot_corr, boot_edge_frac
+                                    block-bootstrap uncertainty (if n_bootstrap)
         n_photons
         surface                     (grid_at, grid_xt, J) if return_surface
     """
@@ -330,6 +375,12 @@ def estimate_offset(at, xt, z, interpolator, search=((-10, 10, 0.5), (-10, 10, 0
         'dz_opt': dz_opt,
         'n_photons': int(len(z)),
     }
+    if n_bootstrap and np.isfinite(fval):
+        sa, sx, rho, edge = bootstrap_offset(at, xt, z, interpolator, x0,
+                                             n_bootstrap=n_bootstrap,
+                                             block_m=bootstrap_block_m, fit_dz=fit_dz,
+                                             min_valid_frac=min_valid_frac)
+        out.update(boot_sigma_at=sa, boot_sigma_xt=sx, boot_corr=rho, boot_edge_frac=edge)
     if return_surface:
         out['surface'] = (grid_at, grid_xt, J)
     return out

@@ -26,6 +26,7 @@ dependencies = [
 # Used by projects/ and examples/, not by the library itself
 projects = ["scikit-learn", "fiona"]
 planet = ["requests", "opencv-python", "Pillow"]
+geolocation = ["earthaccess"]
 notebooks = ["jupyter", "ipywidgets"]
 
 [dependency-groups]

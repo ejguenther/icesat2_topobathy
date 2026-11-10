@@ -92,3 +92,19 @@ def test_segment_sc_orient():
     t = np.array([5.0, 10.0, 15.0, 25.0])
     out = segment_sc_orient(t, [1, 2, 0], [8.0, 12.0, 20.0])
     assert out.tolist() == [-1, 1, 2, 0]
+
+
+def test_bootstrap_sigma_reflects_constraint(als_interp):
+    rng = np.random.default_rng(1)
+    at = np.sort(rng.uniform(100, 1400, 3000)); xt = np.zeros_like(at)
+    z = surface(at, xt) + rng.normal(0, 0.1, at.size)
+    res = estimate_offset(at, xt, z, als_interp, n_bootstrap=15)
+    assert res['boot_sigma_at'] < 0.5 and res['boot_sigma_xt'] < 0.5
+
+    # Flat plane: horizontal shift is unconstrained
+    g_at, g_xt = np.meshgrid(np.arange(-50, 1550, 1.0), np.arange(-40, 40, 1.0), indexing='ij')
+    flat = create_interpolator(pd.DataFrame({'alongtrack': g_at.ravel(), 'crosstrack': g_xt.ravel(),
+                                             'ellip_h': 100.0, 'classification': 2}))
+    zf = 100.0 + rng.normal(0, 0.1, at.size)
+    res = estimate_offset(at, xt, zf, flat, n_bootstrap=15)
+    assert max(res['boot_sigma_at'], res['boot_sigma_xt']) > 1.0 or res['boot_edge_frac'] > 0.2

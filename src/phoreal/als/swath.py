@@ -91,7 +91,7 @@ def estimate_alongtrack(points_xy, line, line_x, line_y, line_at_dist):
     
 def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
                        decimation=DECIMATION, crosstrack_limit=CROSSTRACK_LIMIT,
-                       bbox_buffer=BBOX_BUFFER):
+                       bbox_buffer=BBOX_BUFFER, keep_classes=None):
     """
     Processes a single lidar tile to extract points along the ICESat-2 track.
     This function is designed to be run in parallel.
@@ -100,6 +100,8 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
     crosstrack_limit: keep points with |crosstrack| below this (m). Must exceed
         the offset search range plus the interpolation margin.
     bbox_buffer: buffer (m) used to trim the track to the tile and pre-filter.
+    keep_classes: if given, only points with these ASPRS classes are kept
+        (applied before decimation, e.g. [2] for ground only).
     """
     # try:
     file_name, tile_geom = tile_info
@@ -109,6 +111,8 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
     
     # 1. Read and project lidar data
     las = laspy.read(file_name)
+    if keep_classes is not None:
+        las.points = las.points[np.isin(np.asarray(las.classification), keep_classes)]
     transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
     x_coords, y_coords = transformer.transform(las.x[::decimation], las.y[::decimation])
     points_xy = np.column_stack((x_coords, y_coords))
@@ -206,7 +210,8 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
 
 def create_als_swath(extent_gdf, df_seg, num_workers = 8, utm_epsg=None,
                      decimation=DECIMATION, crosstrack_limit=CROSSTRACK_LIMIT,
-                     is2_buffer=ICESAT2BUFFER, bbox_buffer=BBOX_BUFFER):
+                     is2_buffer=ICESAT2BUFFER, bbox_buffer=BBOX_BUFFER,
+                     keep_classes=None):
     """
     Generates a swath of lidar points along an ICESat-2 ground track by
     processing lidar tiles in parallel.
@@ -216,6 +221,7 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8, utm_epsg=None,
         ``swath.attrs['utm_epsg']``.
     decimation, crosstrack_limit, bbox_buffer: see ``process_lidar_tile``.
     is2_buffer: buffer (m) around the track used to select tiles.
+    keep_classes: see ``process_lidar_tile``.
     """
     if utm_epsg is None:
         # Legacy: UTM zone from the first tile's location
@@ -237,7 +243,7 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8, utm_epsg=None,
         for i in tqdm(range(len(tiles_to_process)), desc="Processing Tiles:"):
             df_tile = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg,
                                          decimation=decimation, crosstrack_limit=crosstrack_limit,
-                                         bbox_buffer=bbox_buffer)
+                                         bbox_buffer=bbox_buffer, keep_classes=keep_classes)
             
             if not df_tile.empty:
                 df_list.append(df_tile)            
@@ -254,7 +260,8 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8, utm_epsg=None,
                               utm_epsg=utm_epsg,
                               decimation=decimation,
                               crosstrack_limit=crosstrack_limit,
-                              bbox_buffer=bbox_buffer)
+                              bbox_buffer=bbox_buffer,
+                              keep_classes=keep_classes)
     
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
             # executor.map applies the worker function to each item in the list
