@@ -21,6 +21,7 @@ Outputs (in <work_dir>/offsets/):
 Usage:
     uv run python run_offsets.py [--config config.yaml] [--limit N]
                                  [--jobs N] [--only GRANULE_SUBSTR] [--collect]
+                                 [--retry-errors]
 """
 import argparse
 import json
@@ -266,6 +267,8 @@ def main():
     ap.add_argument('--jobs', type=int, default=None)
     ap.add_argument('--only', default=None, help='substring filter on ATL03 name')
     ap.add_argument('--collect', action='store_true', help='only combine parts')
+    ap.add_argument('--retry-errors', action='store_true',
+                    help="re-run jobs whose part has status 'error' (their swath cache is cleared)")
     args = ap.parse_args()
 
     cfg = load_config(args.config)
@@ -280,8 +283,18 @@ def main():
         jobs = build_jobs(cfg, work, dirs['atl03'])
         if args.only:
             jobs = [j for j in jobs if args.only in j['name_03']]
-        todo = [j for j in jobs
-                if not (dirs['parts'] / f"{Path(j['name_03']).stem}_{j['gt']}.parquet").exists()]
+        def needs_run(j):
+            tag = f"{Path(j['name_03']).stem}_{j['gt']}"
+            part = dirs['parts'] / f'{tag}.parquet'
+            if not part.exists():
+                return True
+            if args.retry_errors and (pd.read_parquet(part, columns=['status'])['status'] == 'error').any():
+                part.unlink()
+                (dirs['swaths'] / f'{tag}.pqt').unlink(missing_ok=True)
+                return True
+            return False
+
+        todo = [j for j in jobs if needs_run(j)]
         if args.limit:
             todo = todo[:args.limit]
         print(f"{len(jobs)} jobs, {len(todo)} to run")

@@ -26,7 +26,7 @@ dependencies = [
 # Used by projects/ and examples/, not by the library itself
 projects = ["scikit-learn", "fiona"]
 planet = ["requests", "opencv-python", "Pillow"]
-geolocation = ["earthaccess"]
+geolocation = ["earthaccess<0.19", "icepyx"]  # icepyx 2.0 calls concept_id(), a property since earthaccess 0.19
 notebooks = ["jupyter", "ipywidgets"]
 
 [dependency-groups]

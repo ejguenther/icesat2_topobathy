@@ -111,6 +111,11 @@ def main():
         print(f"Warning: {no_crs.sum()} tiles without a usable CRS are excluded")
         df = df[~no_crs]
 
+    empty = df['point_count'] == 0
+    if empty.any():
+        print(f"Warning: {empty.sum()} empty tiles (0 points) are excluded")
+        df = df[~empty]
+
     tiles = build_geometries(df)
     tiles.to_file(out_dir / 'als_tiles.gpkg', driver='GPKG')
     cov = build_coverage(tiles)

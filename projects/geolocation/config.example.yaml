@@ -36,3 +36,13 @@ offsets:
   decimation: 2                    # applied after keeping ground points only
   photon_class: "atl08_ground"     # atl08_class == 1
   n_jobs: 4
+
+# --- Pilot (pilot_icepyx.py); usually in a separate config with its own work_dir ---
+pilot:
+  inventory_parts: "/path/to/geolocation_work/als_inventory/parts"
+  n_granules: 10
+  min_beam_km: 2.0                # strong-beam ATL08 ground overlap needed to count a beam
+  date_range: ["2018-10-13", "2026-11-10"]
+  aois:                                   # name: [west, south, east, north]
+    podhale_82755: [19.969, 49.437, 20.125, 49.542]
+    nowy_sacz_82919: [20.625, 49.542, 20.781, 49.667]

@@ -154,7 +154,16 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
     polygon_path = Path(np.array(tile_geom.buffer(bbox_buffer).exterior.coords))
     original_vertices = np.vstack((is2_x, is2_y)).T
     is_inside_mask = polygon_path.contains_points(original_vertices)
-    
+    # Also keep the vertex just before and after each inside run, so a track
+    # that only clips a tile corner still gives a line (>= 2 vertices) that
+    # spans the tile's points.
+    grown = is_inside_mask.copy()
+    grown[1:] |= is_inside_mask[:-1]
+    grown[:-1] |= is_inside_mask[1:]
+    is_inside_mask = grown
+    if is_inside_mask.sum() < 2:
+        return pd.DataFrame()
+
     trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
     trimmed_is2_at = is2_at[is_inside_mask]
     trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
