@@ -110,9 +110,9 @@ observation epoch.
 
 ### 2. A single-beam error is much larger than the bootstrap says
 
-For passes with ≥ 4 accepted beams, the beams of the same pass scatter by
-**1.7 m AT and 2.0 m XT** (median within-pass SD). The median bootstrap σ for
-the same windows is 0.55 / 0.66 m. That is about 3× smaller, which repeats the
+For the 1,985 passes with ≥ 4 accepted beams, the beams of the same pass
+scatter by **1.71 m AT and 1.92 m XT** (median within-pass SD). The median
+bootstrap σ for the same windows is 0.52 / 0.63 m. That is about 3× smaller, which repeats the
 pilot result (1.8–2.1 m vs ~0.7 m) at scale.
 
 So the block bootstrap captures photon-sampling noise but not the dominant
