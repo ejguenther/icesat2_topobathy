@@ -102,11 +102,21 @@ def fig_errors_by_spot(full, path):
     fig.tight_layout(); fig.savefig(path, dpi=150); plt.close(fig)
 
 
-def fig_pass_consistency(full, path):
+def fig_pass_consistency(full, path, max_passes=30):
     g = full[full['err_at'].notna()].copy()
     g['date'] = pd.to_datetime(g['time_utc']).dt.strftime('%Y-%m-%d')
-    g['pass'] = g['date'] + ' ' + g['aoi_label']
+    g['pass'] = g['date'] + ' ' + g['aoi_label'].astype(str)
+    if 'window_id' in g:
+        g['pass'] = g['pass'] + ' W' + g['window_id'].astype(int).astype(str)
     passes = sorted(g['pass'].unique())
+    if len(passes) > max_passes:  # national runs: show the best-sampled passes
+        # random passes with >= 4 accepted beams, balanced by orientation
+        acc = g[g['accepted']].groupby('pass').agg(n=('gt', 'size'), o=('sc_orient', 'first'))
+        acc = acc[acc['n'] >= 4]
+        k = max(1, max_passes // max(1, acc['o'].nunique()))
+        pick = acc.groupby('o', group_keys=False).apply(
+            lambda x: x.sample(min(k, len(x)), random_state=0)).index
+        passes = sorted(pick); g = g[g['pass'].isin(passes)]
     xpos = {p: i for i, p in enumerate(passes)}
     fig, axes = plt.subplots(2, 1, figsize=(max(8, 0.9 * len(passes) + 2), 7), sharex=True)
     for ax, comp, lab in ((axes[0], 'err_at', 'Along-track error (m)'),
@@ -128,7 +138,7 @@ def fig_pass_consistency(full, path):
         Line2D([], [], marker='o', ls='', color=INK2, markersize=7, label='strong'),
         Line2D([], [], marker='o', ls='', mfc='none', mec=INK2, markersize=7, label='weak'),
         Line2D([], [], marker='o', ls='', color=OTHER, markersize=7, label='flagged')])
-    fig.suptitle('Full-pass error per beam (labels: spot number). Beams of one pass share most pointing error.',
+    fig.suptitle('Segment-window error per beam (labels: spot number; error bars: bootstrap 1σ)',
                  x=0.01, ha='left', color=INK)
     fig.tight_layout(); fig.savefig(path, dpi=150); plt.close(fig)
 
@@ -163,7 +173,12 @@ def fig_cost_surfaces(full, out, path, n=6):
         if not f.exists():
             ax.set_axis_off(); continue
         z = np.load(f)
-        J = z[f"L{int(r['window_length_m'])}_W{int(r['window_id'])}"]
+        kind = r['window_kind'] if 'window_kind' in r and pd.notna(r['window_kind']) \
+            else int(r['window_length_m'])
+        key = f"{kind}_W{int(r['window_id'])}"
+        if key not in z:
+            key = f"L{int(r['window_length_m'])}_W{int(r['window_id'])}"  # pilot naming
+        J = z[key]
         ax.pcolormesh(z['grid_xt'], z['grid_at'], J, cmap=BLUES, shading='nearest')
         ax.plot(r['corr_xt'], r['corr_at'], marker='+', ms=12, mew=2, color=INK)
         ax.set_title(f"{r['time_utc'][:10]} {r['gt']} (spot {int(r['atlas_spot_number'])})",
