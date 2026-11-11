@@ -26,6 +26,7 @@ conda env: it has the **old** phoreal 3.31.1 egg, which other repos
 | `examples/` | Demo notebooks, `quick_plot.py` |
 | `projects/footprint/` | Building-footprint geolocation work (ForestSat26): `building_processing.py`, batch/offset scripts, notebooks |
 | `projects/fl_mangrove_topobathy/` | Config for `scripts/run_pipeline.py` (Florida AOI) |
+| `projects/geolocation/` | ICESat-2 geolocation error vs. Poland 2025 ALS: tile inventory, granule download, batch offsets (`docs/` has the project brief) |
 | `projects/atl24_labels/` | `label_check.py`: ATL24 label CSV QA |
 | `projects/planet_timelapse/` | Unrelated Planet Labs download/timelapse utility |
 
@@ -46,7 +47,5 @@ Dependency rule: `projects/` may import `phoreal`, but `phoreal` never imports f
 - `als/las_extent`, `tif_extent` and `reference_extent` are copy-paste forks
   (`tif_extent` ≡ `reference_extent` apart from the removed `__main__`).
   Merging them is pending.
-- `phoreal/als/swath.py` has a leftover `import pdb; pdb.set_trace()` in the
-  function that creates and transforms the swath.
 - `phoreal/io/metadata.py` lazily imports `icesatUtils`, an internal module that
   isn't installed.

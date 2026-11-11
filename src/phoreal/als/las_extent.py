@@ -39,6 +39,8 @@ def read_las_header(las_file):
     z_max = las.header.z_max
     creatation_date = las.header.creation_date
     parse_crs = las.header.parse_crs() 
+    point_count = las.header.point_count
+    point_format = las.header.point_format.id
     # print('2\n')
     # Read into dictionary
     las_dict = {"file_name":las_file,
@@ -49,7 +51,9 @@ def read_las_header(las_file):
             "z_min":z_min,
             "z_max":z_max,
             "creation_date":creatation_date,
-            "parse_crs":parse_crs}
+            "parse_crs":parse_crs,
+            "point_count":point_count,
+            "point_format":point_format}
     # print('read_las_header return\n')
     las.close()
 
@@ -68,7 +72,7 @@ def process_las_files_multiprocessing(las_list, num_processes=None):
     if num_processes is None:
         num_processes = np.ceil(multiprocessing.cpu_count()/2).astype(int)
     print('Reading header files:')
-    pool = multiprocessing.Pool(processes=3)
+    pool = multiprocessing.Pool(processes=num_processes)
     results = tqdm(pool.imap_unordered(process_las_file, las_list),
                    total = len(las_list))
 
@@ -123,12 +127,14 @@ def create_gdf_las_extent(las_list, num_processes=None):
     
     # Iterate through unique CRS and reproject extents
     for crs in df['parse_crs'].unique():
-        transformer = Transformer.from_crs(crs.to_2d(), 4326)
+        transformer = Transformer.from_crs(crs.to_2d(), 4326, always_xy=True)
     
-        df.loc[df['parse_crs'] == crs, 'lat_min'], df.loc[df['parse_crs'] == crs, 'lon_min'] = transformer.transform(
+        # always_xy: header x/y are easting/northing even when the CRS
+        # definition is northing-first (e.g. EPSG:2180); output is lon, lat.
+        df.loc[df['parse_crs'] == crs, 'lon_min'], df.loc[df['parse_crs'] == crs, 'lat_min'] = transformer.transform(
             df.loc[df['parse_crs'] == crs, 'x_min'], df.loc[df['parse_crs'] == crs, 'y_min'])
     
-        df.loc[df['parse_crs'] == crs, 'lat_max'], df.loc[df['parse_crs'] == crs, 'lon_max'] = transformer.transform(
+        df.loc[df['parse_crs'] == crs, 'lon_max'], df.loc[df['parse_crs'] == crs, 'lat_max'] = transformer.transform(
             df.loc[df['parse_crs'] == crs, 'x_max'], df.loc[df['parse_crs'] == crs, 'y_max'])
 
     # Create geometries from lat/lon extents using Shapely

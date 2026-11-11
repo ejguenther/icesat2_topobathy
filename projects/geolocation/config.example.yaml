@@ -1,0 +1,48 @@
+# Copy to config.yaml (gitignored) and fill in paths for your machine.
+
+# --- ALS (Poland 2025, already reprojected to WGS84 / UTM, ellipsoidal heights) ---
+als:
+  laz_dir: "/path/to/poland_2025/laz_utm"
+  ground_class: 2
+  # Reference frame / epoch of the reprojected ALS, recorded in the outputs
+  frame: "WGS84 (ITRF)"
+
+# --- Working directories (outputs are gitignored by name, but keep them off-repo) ---
+work_dir: "/path/to/geolocation_work"     # inventory, manifests, results
+granule_dir: "/path/to/icesat2_granules"   # downloaded ATL03 / ATL08 (subset) files
+
+# --- Granule search (download_granules.py) ---
+search:
+  short_names: ["ATL03", "ATL08"]
+  version: "007"
+  start: "2018-10-13"
+  end: null                       # null = today
+  min_overlap_km: 1.0             # keep granules whose track crosses >= this much ALS
+  subset_buffer_deg: 0.02         # bbox padding when subsetting ATL03 after download
+
+# --- Offset estimation (run_offsets.py) ---
+offsets:
+  window_lengths_m: [null, 2000, 1000]   # null = all overlapping photons in one window
+  min_window_photons: 200
+  search: [[-10, 10, 0.5], [-10, 10, 0.5]]   # (start, stop, step) along, cross (m)
+  grid_resolution: 1.0
+  max_fill_distance: 3.0           # m; ALS gaps wider than this stay NaN
+  min_valid_frac: 0.9
+  fit_dz: false
+  n_bootstrap: 30                  # block bootstrap replicates for uncertainty (0 = off)
+  bootstrap_block_m: 100.0
+  max_sigma_m: 1.5                 # flag weak_constraint above this bootstrap sigma
+  crosstrack_limit: 20.0           # ALS swath half-width (m); photons sit at xt~0
+  decimation: 2                    # applied after keeping ground points only
+  photon_class: "atl08_ground"     # atl08_class == 1
+  n_jobs: 4
+
+# --- Pilot (pilot_icepyx.py); usually in a separate config with its own work_dir ---
+pilot:
+  inventory_parts: "/path/to/geolocation_work/als_inventory/parts"
+  n_granules: 10
+  min_beam_km: 2.0                # strong-beam ATL08 ground overlap needed to count a beam
+  date_range: ["2018-10-13", "2026-11-10"]
+  aois:                                   # name: [west, south, east, north]
+    podhale_82755: [19.969, 49.437, 20.125, 49.542]
+    nowy_sacz_82919: [20.625, 49.542, 20.781, 49.667]

@@ -323,7 +323,7 @@ def read_atl08_data_mapping(filepath: str, beam_label: str):
     except Exception as e:
         print(f"Error reading HDF5 file {filepath}: {e}")
         # To match original behavior of returning empty lists on any error after file check:
-        return np.array([]), np.array([]), np.array([])
+        return np.array([]), np.array([]), np.array([]), np.array([])
 
 
     return classed_pc_indx, classed_pc_flag, classed_index_seg, ph_h
@@ -463,4 +463,170 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
     df.attrs['cycle'] = metadata['cycle']
     df.attrs['direction'] = metadata['direction']
     
+    return df
+
+# --------------------------------------------------------------------------- #
+# Segment-rate geolocation metadata (ATL03 Release 007)
+# --------------------------------------------------------------------------- #
+#
+# Field notes, checked against ATL03_20181215070448_11860106_007_01.h5:
+#
+#   gtx/geolocation/* (one value per ~20 m segment)
+#     ref_elev, ref_azimuth   radians. Unit pointing vector of the reference
+#                             photon in local ENU. ref_elev is measured up from
+#                             the E-N plane (~pi/2 = nadir-looking), ref_azimuth
+#                             from North, positive toward East.
+#     beta_angle, orbit_angle degrees. orbit_angle is circular.
+#     roll, pitch, yaw        degrees.
+#     sigma_along/_across     meters. Often a constant default (5.0 m was seen in
+#                             the check file). Not a measured uncertainty; see
+#                             `sigma_horiz_is_default`.
+#     sigma_h                 meters.
+#     podppd_flag             0 nominal, 1 pod_degrade, 2 ppd_degrade,
+#                             3 podppd_degrade, 4-7 the same during calibration.
+#     velocity_sc             m/s, (n, 3), ECEF (ITRF) components.
+#     Float fill value is the dtype max (~3.4e38 / 1.8e308); converted to NaN.
+#   gtx/bckgrd_atlas/bckgrd_rate  counts/s at 50-shot rate, with its own
+#                                 delta_time. Interpolated to segment time here.
+#   orbit_info/sc_orient (+ sc_orient_time)  0 backward, 1 forward,
+#                                 2 transition. One entry per orientation
+#                                 change, so a granule can hold several.
+#   ancillary_data/atlas_engineering/ph_uncorrelated_error  (6, 1) meters.
+#       The product says it is "mapped onto gt1l..gt3r using sc_orient". The
+#       exact ordering is NOT verified, so the raw vector is kept in attrs and
+#       not resolved to a single beam value.
+
+GEOLOCATION_SEGMENT_FIELDS = [
+    'segment_id', 'delta_time', 'segment_dist_x', 'segment_length',
+    'segment_ph_cnt', 'ph_index_beg',
+    'reference_photon_lat', 'reference_photon_lon',
+    'ref_elev', 'ref_azimuth', 'beta_angle', 'orbit_angle',
+    'roll', 'pitch', 'yaw', 'altitude_sc',
+    'sigma_along', 'sigma_across', 'sigma_h', 'podppd_flag',
+    'solar_elevation', 'solar_azimuth',
+    'tx_pulse_energy', 'full_sat_fract', 'near_sat_fract',
+]
+
+
+def _read_with_fill(dset):
+    """Read an HDF5 dataset, turning its _FillValue into NaN for float data."""
+    arr = np.asarray(dset[()])
+    fill = dset.attrs.get('_FillValue', None)
+    if fill is not None and np.issubdtype(arr.dtype, np.floating):
+        arr = arr.astype(np.float64)
+        arr[arr == np.float64(np.asarray(fill).item())] = np.nan
+    return arr
+
+
+def _decode(value):
+    value = np.asarray(value).ravel()[0]
+    return value.decode() if isinstance(value, bytes) else value
+
+
+def segment_sc_orient(delta_time, sc_orient, sc_orient_time):
+    """
+    Spacecraft orientation for each time.
+
+    sc_orient[i] applies from sc_orient_time[i] onward. Times before the first
+    entry get -1 (unknown).
+
+    Returns:
+        np.ndarray of int8: 0 backward, 1 forward, 2 transition, -1 unknown.
+    """
+    delta_time = np.asarray(delta_time)
+    sc_orient = np.asarray(sc_orient).ravel()
+    sc_orient_time = np.asarray(sc_orient_time).ravel()
+    order = np.argsort(sc_orient_time)
+    sc_orient, sc_orient_time = sc_orient[order], sc_orient_time[order]
+    idx = np.searchsorted(sc_orient_time, delta_time, side='right') - 1
+    out = np.full(delta_time.shape, -1, dtype=np.int8)
+    valid = idx >= 0
+    out[valid] = sc_orient[idx[valid]]
+    return out
+
+
+def read_segment_geolocation(atl03_file, gt, fields=None):
+    """
+    Reads ATL03 segment-rate geolocation metadata for one beam.
+
+    Returns one row per geolocation segment (~20 m) with the fields in
+    GEOLOCATION_SEGMENT_FIELDS (fill -> NaN), plus:
+        velocity_sc_x/_y/_z   ECEF spacecraft velocity (m/s)
+        bckgrd_rate           background rate interpolated to segment time
+        sc_orient             per-segment orientation from orbit_info
+                              (0 backward, 1 forward, 2 transition, -1 unknown)
+        sigma_horiz_is_default  True where sigma_along and sigma_across both
+                              equal the granule's single repeated value
+
+    Granule/beam identifiers are stored in ``df.attrs``: release, version,
+    granule name, rgt, cycle, orbit_number, gt, atlas_spot_number,
+    atlas_beam_type, and ph_uncorrelated_error_raw (6 values, mapping
+    unverified).
+
+    Args:
+        atl03_file (str): Path to an ATL03 granule (full or subset).
+        gt (str): Ground track, e.g. 'gt1l'.
+        fields (list, optional): geolocation fields to read. Defaults to
+            GEOLOCATION_SEGMENT_FIELDS. Missing fields are filled with NaN and
+            listed in ``df.attrs['missing_fields']``.
+    """
+    fields = GEOLOCATION_SEGMENT_FIELDS if fields is None else fields
+    data, missing = {}, []
+    with h5py.File(atl03_file, 'r') as f:
+        geo = f[f'{gt}/geolocation']
+        n_seg = geo['segment_id'].shape[0]
+        for name in fields:
+            if name in geo:
+                data[name] = _read_with_fill(geo[name])
+            else:
+                missing.append(name)
+                data[name] = np.full(n_seg, np.nan)
+
+        if 'velocity_sc' in geo:
+            vel = _read_with_fill(geo['velocity_sc'])
+            data['velocity_sc_x'], data['velocity_sc_y'], data['velocity_sc_z'] = vel.T
+        else:
+            missing.append('velocity_sc')
+
+        # Background rate at segment time
+        bg_path = f'{gt}/bckgrd_atlas'
+        if f'{bg_path}/bckgrd_rate' in f and f[f'{bg_path}/delta_time'].shape[0] > 0:
+            bg_t = np.asarray(f[f'{bg_path}/delta_time'])
+            bg_r = np.asarray(f[f'{bg_path}/bckgrd_rate'], dtype=np.float64)
+            data['bckgrd_rate'] = np.interp(data['delta_time'], bg_t, bg_r,
+                                            left=np.nan, right=np.nan)
+        else:
+            missing.append('bckgrd_rate')
+            data['bckgrd_rate'] = np.full(n_seg, np.nan)
+
+        data['sc_orient'] = segment_sc_orient(
+            data['delta_time'],
+            f['orbit_info/sc_orient'][()],
+            f['orbit_info/sc_orient_time'][()],
+        )
+
+        attrs = {
+            'atl03_file': str(atl03_file),
+            'granule': os.path.basename(str(atl03_file)),
+            'gt': gt,
+            'release': _decode(f['ancillary_data/release'][()]),
+            'version': _decode(f['ancillary_data/version'][()]),
+            'rgt': int(f['orbit_info/rgt'][0]),
+            'cycle': int(f['orbit_info/cycle_number'][0]),
+            'orbit_number': int(f['orbit_info/orbit_number'][0]),
+            'atlas_spot_number': int(_decode(f[gt].attrs['atlas_spot_number'])),
+            'atlas_beam_type': _decode(f[gt].attrs['atlas_beam_type']),
+            'missing_fields': missing,
+        }
+        ue_path = 'ancillary_data/atlas_engineering/ph_uncorrelated_error'
+        attrs['ph_uncorrelated_error_raw'] = (
+            np.asarray(f[ue_path]).ravel().tolist() if ue_path in f else None)
+
+    df = pd.DataFrame(data)
+    sa, sx = df['sigma_along'], df['sigma_across']
+    if sa.notna().any() and sa.nunique() == 1 and sx.nunique() == 1:
+        df['sigma_horiz_is_default'] = True
+    else:
+        df['sigma_horiz_is_default'] = False
+    df.attrs.update(attrs)
     return df

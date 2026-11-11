@@ -46,13 +46,11 @@ def downsample_by_distance(df, resolution_m=50, dist_col='alongtrack'):
 def prepare_icesat2_track(df_seg, utm_epsg, resolution_m=None):
     """Prepares the ICESat-2 ground track data by creating a projected LineString."""
     
-    # Simplify Data if resolution is requested
-    if resolution_m is not None:
-        # Check if we actually have enough data to warrant simplification
-        if len(df_seg) > 100: 
-             df_seg_ds = downsample_by_distance(df_seg, resolution_m=resolution_m)
-        
-             
+    # Simplify Data if resolution is requested (and there is enough data to warrant it)
+    df_seg_ds = df_seg
+    if resolution_m is not None and len(df_seg) > 100:
+        df_seg_ds = downsample_by_distance(df_seg, resolution_m=resolution_m)
+
     # Extract data, skipping points for performance if needed
     lon = df_seg_ds['longitude'].values
     lat = df_seg_ds['latitude'].values
@@ -91,10 +89,19 @@ def estimate_alongtrack(points_xy, line, line_x, line_y, line_at_dist):
     # Interpolate to find the original along-track distance
     return np.interp(projected_dist_on_line, line_vertex_dist, line_at_dist)
     
-def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
+def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg,
+                       decimation=DECIMATION, crosstrack_limit=CROSSTRACK_LIMIT,
+                       bbox_buffer=BBOX_BUFFER, keep_classes=None):
     """
     Processes a single lidar tile to extract points along the ICESat-2 track.
     This function is designed to be run in parallel.
+
+    decimation: keep every Nth lidar point (1 = keep all).
+    crosstrack_limit: keep points with |crosstrack| below this (m). Must exceed
+        the offset search range plus the interpolation margin.
+    bbox_buffer: buffer (m) used to trim the track to the tile and pre-filter.
+    keep_classes: if given, only points with these ASPRS classes are kept
+        (applied before decimation, e.g. [2] for ground only).
     """
     # try:
     file_name, tile_geom = tile_info
@@ -104,8 +111,10 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
     
     # 1. Read and project lidar data
     las = laspy.read(file_name)
+    if keep_classes is not None:
+        las.points = las.points[np.isin(np.asarray(las.classification), keep_classes)]
     transformer = Transformer.from_crs(las.header.parse_crs(), utm_epsg, always_xy=True)
-    x_coords, y_coords = transformer.transform(las.x[::DECIMATION], las.y[::DECIMATION])
+    x_coords, y_coords = transformer.transform(las.x[::decimation], las.y[::decimation])
     points_xy = np.column_stack((x_coords, y_coords))
     
     # Read other las info to close the lasfile
@@ -119,15 +128,15 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
 
 
     # 2. Trim the ICESat-2 line to the buffered tile extent for local analysis
-    trimmed_line = is2_line.intersection(tile_geom.buffer(BBOX_BUFFER))
+    trimmed_line = is2_line.intersection(tile_geom.buffer(bbox_buffer))
     if trimmed_line.is_empty:
         return pd.DataFrame() # Return empty if no intersection
 
     # 3. Perform a fast bounding box pre-filter on lidar points
     min_x, min_y, max_x, max_y = trimmed_line.bounds
     bbox_filter = (
-        (points_xy[:, 0] >= min_x - BBOX_BUFFER) & (points_xy[:, 0] <= max_x + BBOX_BUFFER) &
-        (points_xy[:, 1] >= min_y - BBOX_BUFFER) & (points_xy[:, 1] <= max_y + BBOX_BUFFER)
+        (points_xy[:, 0] >= min_x - bbox_buffer) & (points_xy[:, 0] <= max_x + bbox_buffer) &
+        (points_xy[:, 1] >= min_y - bbox_buffer) & (points_xy[:, 1] <= max_y + bbox_buffer)
     )
     candidate_points_xy = points_xy[bbox_filter]
     if len(candidate_points_xy) == 0:
@@ -135,17 +144,26 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
 
     # 4. Calculate signed cross-track distance and filter
     crosstrack_dist = estimate_signed_crosstrack(candidate_points_xy, trimmed_line)
-    crosstrack_mask = np.abs(crosstrack_dist) < CROSSTRACK_LIMIT
+    crosstrack_mask = np.abs(crosstrack_dist) < crosstrack_limit
     
     final_points_xy = candidate_points_xy[crosstrack_mask]
     if len(final_points_xy) == 0:
         return pd.DataFrame()
         
     # 5. Get vertices of the ICESat-2 line that are within the tile's buffered extent
-    polygon_path = Path(np.array(tile_geom.buffer(BBOX_BUFFER).exterior.coords))
+    polygon_path = Path(np.array(tile_geom.buffer(bbox_buffer).exterior.coords))
     original_vertices = np.vstack((is2_x, is2_y)).T
     is_inside_mask = polygon_path.contains_points(original_vertices)
-    
+    # Also keep the vertex just before and after each inside run, so a track
+    # that only clips a tile corner still gives a line (>= 2 vertices) that
+    # spans the tile's points.
+    grown = is_inside_mask.copy()
+    grown[1:] |= is_inside_mask[:-1]
+    grown[:-1] |= is_inside_mask[1:]
+    is_inside_mask = grown
+    if is_inside_mask.sum() < 2:
+        return pd.DataFrame()
+
     trimmed_is2_x, trimmed_is2_y = is2_x[is_inside_mask], is2_y[is_inside_mask]
     trimmed_is2_at = is2_at[is_inside_mask]
     trimmed_line_from_vertices = LineString(zip(trimmed_is2_x, trimmed_is2_y))
@@ -160,12 +178,12 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
         df_tile = pd.DataFrame({
             'x': final_points_xy[:, 0],
             'y': final_points_xy[:, 1],
-            'z': z[::DECIMATION][bbox_filter][crosstrack_mask],
-            'classification': classification[::DECIMATION][bbox_filter][crosstrack_mask],
-            'intensity': intensity[::DECIMATION][bbox_filter][crosstrack_mask],
-            'number_of_returns': number_of_returns[::DECIMATION][bbox_filter][crosstrack_mask],
-            'return_num': return_num[::DECIMATION][bbox_filter][crosstrack_mask],
-            # 'scan_angles': scan_angles[::DECIMATION][bbox_filter][crosstrack_mask],
+            'z': z[::decimation][bbox_filter][crosstrack_mask],
+            'classification': classification[::decimation][bbox_filter][crosstrack_mask],
+            'intensity': intensity[::decimation][bbox_filter][crosstrack_mask],
+            'number_of_returns': number_of_returns[::decimation][bbox_filter][crosstrack_mask],
+            'return_num': return_num[::decimation][bbox_filter][crosstrack_mask],
+            # 'scan_angles': scan_angles[::decimation][bbox_filter][crosstrack_mask],
             'crosstrack': crosstrack_dist[crosstrack_mask],
             'alongtrack': alongtrack_dist,
             'file': base_name
@@ -199,20 +217,31 @@ def process_lidar_tile(tile_info, is2_line, is2_x, is2_y, is2_at, utm_epsg):
     #     })
     return df_tile
 
-def create_als_swath(extent_gdf, df_seg, num_workers = 8):
+def create_als_swath(extent_gdf, df_seg, num_workers = 8, utm_epsg=None,
+                     decimation=DECIMATION, crosstrack_limit=CROSSTRACK_LIMIT,
+                     is2_buffer=ICESAT2BUFFER, bbox_buffer=BBOX_BUFFER,
+                     keep_classes=None):
     """
     Generates a swath of lidar points along an ICESat-2 ground track by
     processing lidar tiles in parallel.
+
+    utm_epsg: working projection ("EPSG:326NN"). If None, uses the UTM zone of
+        the first tile (legacy behaviour). The value used is stored in
+        ``swath.attrs['utm_epsg']``.
+    decimation, crosstrack_limit, bbox_buffer: see ``process_lidar_tile``.
+    is2_buffer: buffer (m) around the track used to select tiles.
+    keep_classes: see ``process_lidar_tile``.
     """
-    # Determine the best UTM zone from the first tile's location
-    utm_epsg = find_utm_zone_epsg(extent_gdf.iloc[0].lat_min,extent_gdf.iloc[0].lon_min)
+    if utm_epsg is None:
+        # Legacy: UTM zone from the first tile's location
+        utm_epsg = find_utm_zone_epsg(extent_gdf.iloc[0].lat_min, extent_gdf.iloc[0].lon_min)
     extent_gdf = extent_gdf.to_crs(utm_epsg) # Convert extent to UTM
-    
+
     # Prepare the ICESat-2 track once
     is2_line, is2_x, is2_y, is2_at = prepare_icesat2_track(df_seg, utm_epsg, resolution_m=50)
 
     # Spatially select lidar tiles that intersect the ground track
-    intersecting_tiles = extent_gdf[extent_gdf.intersects(is2_line.buffer(ICESAT2BUFFER))]
+    intersecting_tiles = extent_gdf[extent_gdf.intersects(is2_line.buffer(is2_buffer))]
     
     # Create a list of tuples (file_name, geometry) to iterate over
     tiles_to_process = list(zip(intersecting_tiles['file_name'], intersecting_tiles['geometry']))
@@ -221,7 +250,9 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8):
     if num_workers <= 1:
         print("Processing [1 worker]")
         for i in tqdm(range(len(tiles_to_process)), desc="Processing Tiles:"):
-            df_tile = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg)
+            df_tile = process_lidar_tile(tiles_to_process[i], is2_line, is2_x, is2_y, is2_at, utm_epsg,
+                                         decimation=decimation, crosstrack_limit=crosstrack_limit,
+                                         bbox_buffer=bbox_buffer, keep_classes=keep_classes)
             
             if not df_tile.empty:
                 df_list.append(df_tile)            
@@ -235,7 +266,11 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8):
                               is2_x=is2_x, 
                               is2_y=is2_y, 
                               is2_at=is2_at, 
-                              utm_epsg=utm_epsg)
+                              utm_epsg=utm_epsg,
+                              decimation=decimation,
+                              crosstrack_limit=crosstrack_limit,
+                              bbox_buffer=bbox_buffer,
+                              keep_classes=keep_classes)
     
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
             # executor.map applies the worker function to each item in the list
@@ -247,10 +282,12 @@ def create_als_swath(extent_gdf, df_seg, num_workers = 8):
                     df_list.append(df_tile)
 
     if not df_list:
-        return pd.DataFrame()
-        
-    # Concatenate results from all processed tiles into a single DataFrame
-    return pd.concat(df_list, ignore_index=True)
+        swath = pd.DataFrame()
+    else:
+        # Concatenate results from all processed tiles into a single DataFrame
+        swath = pd.concat(df_list, ignore_index=True)
+    swath.attrs['utm_epsg'] = utm_epsg
+    return swath
 
 
 def transform_als_swath(als_swath, 
@@ -259,6 +296,20 @@ def transform_als_swath(als_swath,
     target_geoid_file=None, 
     input_units='meters', 
     source_datum='nad83'):
+    """
+    Converts swath heights to WGS84 ellipsoidal heights (``ellip_h``) and adds
+    lat/lon.
+
+    source_datum: 'nad83' applies the NAD83 -> WGS84 shift. None (or 'wgs84' /
+        'itrf') means the input is already WGS84/ITRF; no datum shift applied.
+    source_geoid_file: geoid raster to convert orthometric -> ellipsoidal.
+        None means ``z`` is already ellipsoidal.
+    utm_epsg: projection of x/y. If None, taken from ``als_swath.attrs``.
+    """
+    if utm_epsg is None:
+        utm_epsg = als_swath.attrs.get('utm_epsg')
+        if utm_epsg is None:
+            raise ValueError("utm_epsg not given and not found in als_swath.attrs")
 
     # Standardize Units (Feet -> Meters)
     # It is critical to do this before normalization so relative heights are in meters
@@ -293,7 +344,7 @@ def transform_als_swath(als_swath,
         als_swath['ellip_h'] = als_swath.z
 
     # B. Datum Shift: Ellipsoid (NAD83) -> Ellipsoid (WGS84)
-    if source_datum.lower() == 'nad83':
+    if source_datum is not None and source_datum.lower() == 'nad83':
         _, _, als_swath['ellip_h'] = convert_3d_nad83_to_wgs84(
             als_lon, als_lat, als_swath['ellip_h']
         )
@@ -349,7 +400,6 @@ def get_als_swath_and_transform(
     if len(als_swath) == 0:
         return None
 
-    import pdb; pdb.set_trace()
     als_swath = transform_als_swath(als_swath, 
     utm_epsg, 
     source_geoid_file,
@@ -359,3 +409,255 @@ def get_als_swath_and_transform(
 
     
     return als_swath
+
+# --------------------------------------------------------------------------- #
+# DTM (raster) swath
+# --------------------------------------------------------------------------- #
+#
+# Same along/cross-track frame and output columns as the LAZ swath, built
+# from gridded DTM pixels instead of ground points. One call handles several
+# beams of a granule, so each DTM tile is read once.
+
+def project_points_to_track(points_xy, tile_geom, is2_line, is2_x, is2_y, is2_at,
+                            crosstrack_limit=CROSSTRACK_LIMIT, bbox_buffer=BBOX_BUFFER):
+    """
+    Steps 2-6 of ``process_lidar_tile`` for arbitrary points: trim the track to
+    the buffered tile, keep points with |crosstrack| < crosstrack_limit, and
+    compute their along-track distance.
+
+    Returns (index into points_xy, crosstrack, alongtrack); empty arrays if
+    the track does not cross the tile.
+    """
+    empty = (np.array([], dtype=int), np.array([]), np.array([]))
+    trimmed_line = is2_line.intersection(tile_geom.buffer(bbox_buffer))
+    if trimmed_line.is_empty:
+        return empty
+    min_x, min_y, max_x, max_y = trimmed_line.bounds
+    cand = np.flatnonzero(
+        (points_xy[:, 0] >= min_x - bbox_buffer) & (points_xy[:, 0] <= max_x + bbox_buffer) &
+        (points_xy[:, 1] >= min_y - bbox_buffer) & (points_xy[:, 1] <= max_y + bbox_buffer))
+    if len(cand) == 0:
+        return empty
+    # Cheap pre-filter: perpendicular distance to the trimmed line's chord.
+    # The track is nearly straight within a tile; the margin covers its
+    # curvature, and the exact shapely distance below decides.
+    coords = np.asarray(trimmed_line.coords) if trimmed_line.geom_type == 'LineString' else \
+        np.vstack([np.asarray(g.coords) for g in getattr(trimmed_line, 'geoms', [])])
+    if len(coords) >= 2:
+        p1, p2 = coords[0], coords[-1]
+        v = p2 - p1
+        n = np.hypot(*v)
+        if n > 0:
+            d = np.abs(v[0] * (points_xy[cand, 1] - p1[1]) - v[1] * (points_xy[cand, 0] - p1[0])) / n
+            cand = cand[d < crosstrack_limit + 25.0]
+            if len(cand) == 0:
+                return empty
+    xt = estimate_signed_crosstrack(points_xy[cand], trimmed_line)
+    keep = np.abs(xt) < crosstrack_limit
+    cand, xt = cand[keep], xt[keep]
+    if len(cand) == 0:
+        return empty
+
+    polygon_path = Path(np.array(tile_geom.buffer(bbox_buffer).exterior.coords))
+    inside = polygon_path.contains_points(np.vstack((is2_x, is2_y)).T)
+    grown = inside.copy()
+    grown[1:] |= inside[:-1]
+    grown[:-1] |= inside[1:]
+    if grown.sum() < 2:
+        return empty
+    tx, ty, tat = is2_x[grown], is2_y[grown], is2_at[grown]
+    at = estimate_alongtrack(points_xy[cand], LineString(zip(tx, ty)), tx, ty, tat)
+    # Points beyond either end of the whole track project onto the end vertex
+    # (clamped along-track, radial "cross-track"); drop them.
+    inside = (at > is2_at.min() + 0.5) & (at < is2_at.max() - 0.5)
+    return cand[inside], xt[inside], at[inside]
+
+
+def dtm_path_for(laz_file, dtm_dir):
+    """<dtm_dir>/<laz basename without .laz>_dtm.tif"""
+    base = os.path.basename(laz_file)
+    return os.path.join(dtm_dir, base[:-4] + '_dtm.tif')
+
+
+def _read_dtm_pixels(dtm_file, utm_epsg):
+    """Pixel centres (x, y) and values of a DTM tile, nodata dropped."""
+    import rasterio
+    with rasterio.open(dtm_file) as r:
+        if r.crs is not None and r.crs.to_epsg() != int(str(utm_epsg).split(':')[-1]):
+            raise ValueError(f"{dtm_file}: CRS {r.crs} != {utm_epsg}")
+        a = r.read(1)
+        nodata = r.nodata
+        rows, cols = np.nonzero(~np.isnan(a) if nodata is None else (a != nodata) & ~np.isnan(a))
+        xs, ys = rasterio.transform.xy(r.transform, rows, cols, offset='center')
+    return np.column_stack((np.asarray(xs), np.asarray(ys))), a[rows, cols].astype(np.float64)
+
+
+def create_dtm_swaths(extent_gdf, beams, dtm_dir, utm_epsg,
+                      crosstrack_limit=CROSSTRACK_LIMIT, is2_buffer=ICESAT2BUFFER,
+                      bbox_buffer=BBOX_BUFFER):
+    """
+    DTM swaths for several beams of one granule.
+
+    extent_gdf: tile index with ``file_name`` (LAZ path) and geometry; the DTM
+        for each tile is found with ``dtm_path_for``.
+    beams: {gt: photon DataFrame with longitude, latitude, alongtrack}.
+    dtm_dir: folder of ``*_dtm.tif`` tiles in ``utm_epsg``.
+
+    Note: binning these pixel centres into a 1 m at/xt grid (create_interpolator)
+    aliases when the track runs close to a raster axis (up to half a cell of
+    cross-track bias). Use ``create_dtm_grids`` for offset fitting.
+
+    Returns {gt: DataFrame} with columns alongtrack (float64), crosstrack and
+    ellip_h (float32; DTM value, assumed ellipsoidal like the source LAZ) and
+    classification (2). Each frame has attrs['utm_epsg'].
+    """
+    extent_utm = extent_gdf.to_crs(utm_epsg)
+    tracks = {gt: prepare_icesat2_track(df, utm_epsg, resolution_m=50) for gt, df in beams.items()}
+    sel = np.zeros(len(extent_utm), dtype=bool)
+    for line, *_ in tracks.values():
+        sel |= extent_utm.intersects(line.buffer(is2_buffer)).to_numpy()
+    tiles = extent_utm[sel]
+
+    parts = {gt: [] for gt in beams}
+    for file_name, tile_geom in zip(tiles['file_name'], tiles['geometry']):
+        dtm_file = dtm_path_for(file_name, dtm_dir)
+        if not os.path.exists(dtm_file):
+            continue
+        pts = None
+        for gt, (line, x, y, at) in tracks.items():
+            if not line.intersects(tile_geom.buffer(is2_buffer)):
+                continue
+            if pts is None:
+                pts, vals = _read_dtm_pixels(dtm_file, utm_epsg)
+            idx, xt, along = project_points_to_track(pts, tile_geom, line, x, y, at,
+                                                     crosstrack_limit, bbox_buffer)
+            if len(idx):
+                # slim columns: a national beam can have ~10M pixels
+                parts[gt].append(pd.DataFrame({
+                    'alongtrack': along,                      # ~1e7 m: keep float64
+                    'crosstrack': xt.astype(np.float32),
+                    'ellip_h': vals[idx].astype(np.float32),
+                    'classification': np.int8(2)}))
+    out = {}
+    for gt, p in parts.items():
+        df = pd.concat(p, ignore_index=True) if p else pd.DataFrame()
+        df.attrs['utm_epsg'] = utm_epsg
+        out[gt] = df
+    return out
+
+
+def _bilinear_raster(a, transform, x, y):
+    """Bilinear sample of raster array ``a`` (NaN = nodata) at map coords x, y."""
+    col, row = ~transform * (x, y)
+    c0 = np.floor(col - 0.5).astype(np.int64); r0 = np.floor(row - 0.5).astype(np.int64)
+    fc = col - 0.5 - c0; fr = row - 0.5 - r0
+    out = np.full(len(x), np.nan)
+    ok = (c0 >= 0) & (r0 >= 0) & (c0 + 1 < a.shape[1]) & (r0 + 1 < a.shape[0])
+    c, r, u, v = c0[ok], r0[ok], fc[ok], fr[ok]
+    out[ok] = (a[r, c] * (1 - u) * (1 - v) + a[r, c + 1] * u * (1 - v)
+               + a[r + 1, c] * (1 - u) * v + a[r + 1, c + 1] * u * v)
+    return out
+
+
+def create_dtm_grids(extent_gdf, beams, dtm_dir, utm_epsg, crosstrack_limit=CROSSTRACK_LIMIT,
+                     resolution=1.0, is2_buffer=ICESAT2BUFFER, bbox_buffer=BBOX_BUFFER):
+    """
+    DTM surfaces on regular along/cross-track grids, one per beam.
+
+    Grid nodes (at, xt) are mapped to UTM through the beam's track (vertices
+    from ``prepare_icesat2_track``; xt along the local left normal) and the
+    DTM is sampled bilinearly there. Unlike binning DTM pixel centres
+    (``create_dtm_swaths``), this does not alias when the track runs close
+    to a raster axis.
+
+    Returns {gt: (interpolator, ground)} where interpolator is a linear
+    RegularGridInterpolator over (at, xt) with NaN outside data, and ground is
+    a DataFrame of the valid nodes (alongtrack, crosstrack, ellip_h,
+    classification) for terrain summaries. Each DTM tile is read once.
+    """
+    import rasterio
+    from scipy.interpolate import RegularGridInterpolator
+
+    extent_utm = extent_gdf.to_crs(utm_epsg)
+    xt_nodes = np.arange(-np.floor(crosstrack_limit / resolution),
+                         np.floor(crosstrack_limit / resolution) + 1) * resolution
+    tracks, spans = {}, {}
+    sel = np.zeros(len(extent_utm), dtype=bool)
+    for gt, df in beams.items():
+        line, x, y, at = prepare_icesat2_track(df, utm_epsg, resolution_m=50)
+        order = np.argsort(at)
+        x, y, at = x[order], y[order], at[order]
+        keep = np.concatenate([[True], np.diff(at) > 0])
+        tracks[gt] = (line, x[keep], y[keep], at[keep])
+        sel |= extent_utm.intersects(line.buffer(is2_buffer)).to_numpy()
+    tiles = extent_utm[sel]
+
+    # along-track range of each beam on each tile (from track vertices)
+    tile_ranges = []
+    for file_name, tile_geom in zip(tiles['file_name'], tiles['geometry']):
+        per_beam = {}
+        poly = Path(np.array(tile_geom.buffer(bbox_buffer).exterior.coords))
+        for gt, (line, x, y, at) in tracks.items():
+            if not line.intersects(tile_geom.buffer(is2_buffer)):
+                continue
+            inside = poly.contains_points(np.column_stack((x, y)))
+            grown = inside.copy(); grown[1:] |= inside[:-1]; grown[:-1] |= inside[1:]
+            if grown.sum() >= 2:
+                per_beam[gt] = (at[grown].min(), at[grown].max())
+        if per_beam:
+            tile_ranges.append((file_name, per_beam))
+
+    grids = {}
+    for gt, (line, x, y, at) in tracks.items():
+        lo = [r[gt][0] for _, r in tile_ranges if gt in r]
+        hi = [r[gt][1] for _, r in tile_ranges if gt in r]
+        if not lo:
+            continue
+        a0 = np.floor(min(lo) / resolution) * resolution
+        n = int(np.ceil((max(hi) - a0) / resolution)) + 1
+        grids[gt] = (a0, np.full((n, len(xt_nodes)), np.nan, dtype=np.float32))
+
+    for file_name, per_beam in tile_ranges:
+        dtm_file = dtm_path_for(file_name, dtm_dir)
+        if not os.path.exists(dtm_file):
+            continue
+        with rasterio.open(dtm_file) as r:
+            arr = r.read(1).astype(np.float64)
+            if r.nodata is not None:
+                arr[arr == r.nodata] = np.nan
+            transform = r.transform
+        for gt, (alo, ahi) in per_beam.items():
+            line, x, y, at = tracks[gt]
+            a0, G = grids[gt]
+            i0 = max(int(np.floor((alo - a0) / resolution)), 0)
+            i1 = min(int(np.ceil((ahi - a0) / resolution)), G.shape[0] - 1)
+            a_nodes = a0 + np.arange(i0, i1 + 1) * resolution
+            a_nodes = a_nodes[(a_nodes >= at[0]) & (a_nodes <= at[-1])]
+            if len(a_nodes) == 0:
+                continue
+            bx = np.interp(a_nodes, at, x); by = np.interp(a_nodes, at, y)
+            k = np.clip(np.searchsorted(at, a_nodes, side='right') - 1, 0, len(at) - 2)
+            tx, ty = x[k + 1] - x[k], y[k + 1] - y[k]
+            tn = np.hypot(tx, ty); tx, ty = tx / tn, ty / tn
+            nx, ny = -ty, tx                       # left normal
+            X = bx[:, None] + xt_nodes[None, :] * nx[:, None]
+            Y = by[:, None] + xt_nodes[None, :] * ny[:, None]
+            vals = _bilinear_raster(arr, transform, X.ravel(), Y.ravel()).reshape(X.shape)
+            rows = np.round((a_nodes - a0) / resolution).astype(np.int64)
+            block = G[rows]
+            fill = np.isfinite(vals)
+            block[fill] = vals[fill]
+            G[rows] = block
+
+    out = {}
+    for gt, (a0, G) in grids.items():
+        at_nodes = a0 + np.arange(G.shape[0]) * resolution
+        interp = RegularGridInterpolator((at_nodes, xt_nodes), G, method='linear',
+                                         bounds_error=False, fill_value=np.nan)
+        ii, jj = np.nonzero(np.isfinite(G))
+        ground = pd.DataFrame({'alongtrack': at_nodes[ii],
+                               'crosstrack': xt_nodes[jj].astype(np.float32),
+                               'ellip_h': G[ii, jj], 'classification': np.int8(2)})
+        ground.attrs['utm_epsg'] = utm_epsg
+        out[gt] = (interp, ground)
+    return out
