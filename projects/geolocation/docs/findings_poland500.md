@@ -153,6 +153,33 @@ orientation (for forward: +2.6 m in 2018, −0.6 to −2.4 m afterwards).
   seen in the first version of the pass figure is real for those passes but
   should not be generalised.
 
+**Bias-removed spread by spot and orientation** (accepted segment windows).
+*Bias* is the mean error of each spot × orientation group. *SD* is the
+standard deviation about that bias. *Within-pass SD* also removes each pass's
+mean (passes with ≥ 4 accepted beams). Robust SDs (1.4826 × MAD) agree within
+about 0.3 m.
+
+| Spot | Beam | Orientation | Windows | Bias AT | Bias XT | SD AT | SD XT | Within-pass SD AT | Within-pass SD XT |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | strong | forward | 1,359 | −0.03 | +0.13 | 2.73 | 2.53 | 2.24 | 2.07 |
+| 2 | weak | forward | 1,093 | +0.56 | +0.52 | 2.63 | 3.17 | 1.78 | 2.31 |
+| 3 | strong | forward | 1,318 | +0.34 | −0.76 | 2.58 | 2.83 | 1.85 | 2.15 |
+| 4 | weak | forward | 1,077 | +0.79 | +0.31 | 2.27 | 2.50 | 1.41 | 1.73 |
+| 5 | strong | forward | 1,427 | −0.25 | −0.11 | 2.02 | 2.54 | 1.42 | 1.70 |
+| 6 | weak | forward | 1,117 | +0.41 | −0.30 | 2.34 | 2.33 | 1.38 | 1.52 |
+| 1 | strong | backward | 1,510 | −0.15 | −0.60 | 2.59 | 2.56 | 2.07 | 1.97 |
+| 2 | weak | backward | 1,214 | −0.92 | −0.85 | 2.33 | 3.00 | 1.70 | 2.23 |
+| 3 | strong | backward | 1,374 | −0.48 | +0.81 | 2.33 | 2.76 | 1.84 | 1.99 |
+| 4 | weak | backward | 1,108 | −1.18 | −1.16 | 2.12 | 2.46 | 1.29 | 1.67 |
+| 5 | strong | backward | 1,501 | +0.07 | +0.06 | 1.97 | 2.52 | 1.28 | 1.66 |
+| 6 | weak | backward | 1,210 | −0.61 | −0.60 | 2.12 | 2.38 | 1.30 | 1.59 |
+
+All values in metres. The noise depends on the spot, not on its position on
+the ground: spots 1–3 are noisier than spots 4–6 in both orientations, although
+flipping the spacecraft swaps the spots' left/right positions. Within-pass SD
+is 2.0–2.2 m for spot 1 but 1.3–1.7 m for spots 4–6, and weak spots 4 and 6 are
+among the least noisy, so beam strength alone does not explain it.
+
 ### 5. Weak dependence on orientation, illumination, terrain and year
 
 - **Orientation:** median AT is −0.49 m backward vs +0.27 m forward; XT is
