@@ -2,8 +2,9 @@
 
 ICESat-2 R007 residual horizontal geolocation error against the 2025 Poland ALS
 1 m DTM. Run 2026-11-10 16:16 → 2026-11-11 08:53 (about 16.5 h, 18 workers).
-Code: branch `geolocation-poland` (`d859ef1`). Outputs live under the run's
-`work_dir` (`offsets/offsets.parquet`, `offsets/review/`); see
+Joint per-pass refit 2026-11-11 (25 min, `refit_pass.py`). Code: branch
+`geolocation-poland` (`c1a0e0c`). Outputs live under the run's `work_dir`
+(`offsets/offsets.parquet`, `offsets/review/`, `offsets/pass_refit/`); see
 `config.example.yaml` for the layout.
 
 These are first-pass numbers from the batch output. Nothing below has had a
@@ -94,6 +95,11 @@ The offset is not uniform across direction × orientation: N ranges from −0.10
 to +0.86 m across the four groups. So it is mixed with a component that depends
 on geometry.
 
+The joint per-pass refit (Finding 3) confirms it: **E +0.54 m** (95% CI
+0.39–0.71) and **N +0.26 m** (0.12–0.43). East is positive in all four
+direction × orientation groups (+0.41 to +0.67 m); north ranges from +0.09 to
++0.63 m.
+
 **Hypothesis to check (unverified):** the size (~0.65 m) and direction (NE)
 are close to the Eurasian plate's motion in ITRF. The plate moves roughly 2–3
 cm/yr toward the NE, which accumulates to tens of centimetres to about a
@@ -112,8 +118,15 @@ observation epoch.
 
 For the 1,985 passes with ≥ 4 accepted beams, the beams of the same pass
 scatter by **1.71 m AT and 1.92 m XT** (median within-pass SD). The median
-bootstrap σ for the same windows is 0.52 / 0.63 m. That is about 3× smaller, which repeats the
-pilot result (1.8–2.1 m vs ~0.7 m) at scale.
+bootstrap σ for the same windows is 0.52 / 0.63 m. That is about 3× smaller,
+which repeats the pilot result (1.8–2.1 m vs ~0.7 m) at scale.
+
+These numbers group beams by segment-window index, which only approximately
+lines up across beams (beams split the ALS coverage at different points; only
+39% of such groups covered the same time span). The joint refit uses
+time-aligned passes instead and gives the same answer: each beam's own fit
+scatters about the pass's shared shift by a robust SD of **1.87 m AT and
+1.95 m XT**.
 
 So the block bootstrap captures photon-sampling noise but not the dominant
 error. Possible causes include terrain and DTM structure the fit absorbs,
@@ -121,64 +134,83 @@ under-constrained directions on flat ground, and real spot-to-spot pointing
 differences. Until this is understood, per-beam σ should be inflated (≈3×) or
 taken from the empirical scatter, not from the bootstrap.
 
-### 3. There is also a real pass-level component
+### 3. Most of the error is shared by the pass and persists along the orbit
 
-The robust SD of the pass means is **1.8 m AT, 1.9 m XT**. If beams scattered
-independently around the truth, averaging 4–6 of them would leave only about
-0.8 m. Subtracting that in quadrature leaves a **common pass-level error of
-roughly 1.5–1.7 m** per axis. This is the component a joint per-pass fit would
-estimate.
+**Joint refit** (`refit_pass.py`, from `refit_cache`, no ALS re-read). Each
+granule's ALS stretches were cut into time chunks of at most 20 km (median
+12 km), so every beam covers the same ground. That gives 5,055 passes; 2,370
+have all six beams and 3,311 have at least four. Two models were fitted:
+- **Model 1:** one along-/cross-track shift per pass shared by all beams,
+  minimising the photon-pooled MAE. 2 m brute force over ±10 m, then bounded
+  Nelder–Mead.
+- **Model 2:** the same with a fixed per-spot × orientation offset applied to
+  each beam (Finding 4).
 
-### 4. Spot-dependent offsets exist but are small
+Each beam was also fitted on its own over the same photons. Uncertainty comes
+from leaving one beam out at a time. The ±10 m boundary was hit in 2.7% of
+passes, which are excluded. Single-beam passes reproduce the solo fit exactly.
 
-After removing each pass mean, the median offsets per spot are within about
-±0.6 m:
+| Passes with ≥ 4 beams (3,311) | AT | XT |
+|---|---|---|
+| Spread of pass shifts (robust SD) | 1.51 m | 1.60 m |
+| Pass-shift uncertainty (median, leave-one-beam-out) | 0.86–0.89 m | 0.25–0.65 m |
+| Correlation between adjacent 20 km chunks of a granule (1,643 pairs) | 0.80 | 0.61 |
+| Spread of granule means (robust SD) | 1.33 m | 1.34 m |
+| Spread within a granule (robust SD) | 0.66 m | 1.02 m |
 
-| Spot | AT backward | AT forward | XT backward | XT forward |
-|---|---|---|---|---|
-| 1 (strong) | +0.41 | −0.58 | −0.14 | −0.08 |
-| 2 (weak) | −0.47 | +0.21 | −0.33 | +0.30 |
-| 3 (strong) | +0.09 | +0.31 | +1.13 | −0.24 |
-| 4 (weak) | −0.64 | +0.53 | −0.81 | +0.13 |
-| 5 (strong) | +0.60 | −0.36 | +0.36 | +0.32 |
-| 6 (weak) | −0.22 | +0.09 | −0.30 | −0.23 |
+Pass shifts spread well beyond their uncertainty, leaving roughly **1.2–1.5 m
+of real pass-level error** per axis. That error persists along the orbit:
+neighbouring 20 km stretches of the same granule have strongly correlated
+shifts, and along-track the granule means differ by twice as much as
+stretches within a granule. This points to orbit or pointing error that holds
+over hundreds of kilometres, rather than terrain noise. The per-granule shifts
+are what to model against spacecraft attitude, beta angle and the other
+ancillary variables.
 
-The AT pattern mostly reverses between orientations, as expected when the spot
-layout is mirrored. The difference between spots 1 and 4 changes by year and
-orientation (for forward: +2.6 m in 2018, −0.6 to −2.4 m afterwards).
-- Removing a spot × orientation × year median reduces the within-pass RMS only
-  from 1.53 to 1.32 m (AT) and from 1.72 to 1.54 m (XT).
-- So most of the scatter between beams is **not** a fixed per-spot bias.
-- 2018 has only 14 granules (478 windows). The large early-mission spot pattern
-  seen in the first version of the pass figure is real for those passes but
-  should not be generalised.
+The cross-track leave-one-beam-out uncertainty differs between the two models
+(0.25 vs 0.65 m) and hasn't been investigated; treat it as rough.
 
-**Bias-removed spread by spot and orientation** (accepted segment windows).
-*Bias* is the mean error of each spot × orientation group. *SD* is the
-standard deviation about that bias. *Within-pass SD* also removes each pass's
-mean (passes with ≥ 4 accepted beams). Robust SDs (1.4826 × MAD) agree within
-about 0.3 m.
+### 4. Fixed per-spot offsets are small and don't explain the beam scatter
 
-| Spot | Beam | Orientation | Windows | Bias AT | Bias XT | SD AT | SD XT | Within-pass SD AT | Within-pass SD XT |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | strong | forward | 1,359 | −0.03 | +0.13 | 2.73 | 2.53 | 2.24 | 2.07 |
-| 2 | weak | forward | 1,093 | +0.56 | +0.52 | 2.63 | 3.17 | 1.78 | 2.31 |
-| 3 | strong | forward | 1,318 | +0.34 | −0.76 | 2.58 | 2.83 | 1.85 | 2.15 |
-| 4 | weak | forward | 1,077 | +0.79 | +0.31 | 2.27 | 2.50 | 1.41 | 1.73 |
-| 5 | strong | forward | 1,427 | −0.25 | −0.11 | 2.02 | 2.54 | 1.42 | 1.70 |
-| 6 | weak | forward | 1,117 | +0.41 | −0.30 | 2.34 | 2.33 | 1.38 | 1.52 |
-| 1 | strong | backward | 1,510 | −0.15 | −0.60 | 2.59 | 2.56 | 2.07 | 1.97 |
-| 2 | weak | backward | 1,214 | −0.92 | −0.85 | 2.33 | 3.00 | 1.70 | 2.23 |
-| 3 | strong | backward | 1,374 | −0.48 | +0.81 | 2.33 | 2.76 | 1.84 | 1.99 |
-| 4 | weak | backward | 1,108 | −1.18 | −1.16 | 2.12 | 2.46 | 1.29 | 1.67 |
-| 5 | strong | backward | 1,501 | +0.07 | +0.06 | 1.97 | 2.52 | 1.28 | 1.66 |
-| 6 | weak | backward | 1,210 | −0.61 | −0.60 | 2.12 | 2.38 | 1.30 | 1.59 |
+The median of (beam's own error − pass error) per spot × orientation gives a
+fixed per-spot offset. These offsets are within ±1 m and mostly reverse
+between orientations, as expected when the spot layout is mirrored. The
+largest are for weak spot 4 (0.8–0.9 m AT, 0.6–1.0 m XT) and for spot 3
+cross-track in backward orientation (0.9 m).
 
-All values in metres. The noise depends on the spot, not on its position on
-the ground: spots 1–3 are noisier than spots 4–6 in both orientations, although
-flipping the spacecraft swaps the spots' left/right positions. Within-pass SD
-is 2.0–2.2 m for spot 1 but 1.3–1.7 m for spots 4–6, and weak spots 4 and 6 are
-among the least noisy, so beam strength alone does not explain it.
+Model 2 applies these offsets. Its pass shifts are nearly identical to model
+1's, and the beam scatter barely changes: robust SD 1.87 → 1.76 m AT and
+1.95 → 1.98 m XT. Most of the scatter between beams is therefore **not** a
+fixed per-spot bias. The large early-mission spot pattern in 2018 (spot 1 −
+spot 4 = +2.6 m AT, forward) is real for those passes, but only 14 granules
+come from 2018.
+
+**Bias-removed spread by spot and orientation** (joint refit, time-aligned
+passes with ≥ 4 beams). *Offset* is the spot's median error relative to its
+pass. *SD about pass* is the scatter of the beam's own fit about the pass's
+shared shift. *After offsets* also removes the fixed per-spot offset (model 2).
+All values in metres.
+
+| Spot | Beam | Orientation | Beams | Offset AT | Offset XT | SD about pass AT | SD about pass XT | SD after offsets AT | SD after offsets XT | Robust SD after offsets AT | Robust SD after offsets XT |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | strong | forward | 1,391 | −0.39 | +0.02 | 2.31 | 2.56 | 2.30 | 2.54 | 2.39 | 2.46 |
+| 2 | weak | forward | 1,337 | +0.44 | +0.31 | 2.23 | 3.08 | 2.24 | 3.08 | 2.26 | 2.85 |
+| 3 | strong | forward | 1,525 | +0.38 | −0.23 | 2.05 | 2.50 | 2.04 | 2.49 | 1.99 | 2.05 |
+| 4 | weak | forward | 1,484 | +0.84 | +0.64 | 1.95 | 2.85 | 1.94 | 2.83 | 1.46 | 2.59 |
+| 5 | strong | forward | 1,399 | −0.35 | +0.05 | 1.52 | 2.00 | 1.53 | 2.00 | 1.24 | 1.38 |
+| 6 | weak | forward | 1,333 | +0.35 | −0.06 | 1.87 | 2.45 | 1.87 | 2.43 | 1.64 | 1.78 |
+| 1 | strong | backward | 1,529 | +0.21 | −0.15 | 2.05 | 2.46 | 2.05 | 2.46 | 2.09 | 1.67 |
+| 2 | weak | backward | 1,474 | −0.54 | −0.39 | 2.29 | 3.15 | 2.30 | 3.16 | 2.40 | 3.31 |
+| 3 | strong | backward | 1,700 | −0.12 | +0.91 | 2.01 | 2.55 | 2.01 | 2.53 | 1.82 | 1.66 |
+| 4 | weak | backward | 1,653 | −0.94 | −1.03 | 1.97 | 2.69 | 1.97 | 2.68 | 1.53 | 2.46 |
+| 5 | strong | backward | 1,523 | +0.36 | +0.05 | 1.44 | 2.08 | 1.44 | 2.05 | 1.11 | 1.41 |
+| 6 | weak | backward | 1,471 | −0.33 | −0.21 | 2.01 | 2.50 | 2.01 | 2.48 | 1.69 | 1.83 |
+
+Spot 5 is the least noisy in both orientations (robust SD 1.1–1.2 m AT, 1.4 m
+XT). Weak spots 2 and 4 are the noisiest cross-track (2.5–3.3 m). An earlier
+version of this table, grouped by segment-window index and limited to accepted
+beams, suggested spots 1–3 were noisier than spots 4–6; with time-aligned
+passes that pattern does not hold.
 
 ### 5. Weak dependence on orientation, illumination, terrain and year
 
@@ -226,12 +258,13 @@ among the least noisy, so beam strength alone does not explain it.
 
 1. Settle the ALS reference frame and epoch (Finding 1). This changes the bias
    and may change the year trend.
-2. Fit the cached surfaces jointly per pass: one shift per pass plus per-spot
-   terms, from `refit_cache`. This separates pass-level pointing from per-beam
-   noise directly.
-3. Investigate the per-beam excess scatter (Finding 2), e.g. relate the
-   within-pass residual to Hessian conditioning, DTM fill fraction and terrain
-   roughness. Use that to build an empirical σ model.
-4. Model error against the spacecraft variables already in the table (roll,
-   pitch, yaw, beta angle, orbit angle, `podppd`) at the pass level.
+2. Model the per-granule shifts from the joint refit (Finding 3) against the
+   spacecraft variables already in the table (roll, pitch, yaw, beta angle,
+   orbit angle, `podppd`).
+3. Explain the per-beam excess scatter (Finding 2): relate each beam's
+   residual about its pass shift to cost-surface conditioning, DTM fill
+   fraction and terrain roughness, then build an empirical σ model. Spot 5
+   being consistently cleanest is a lead.
+4. Check the cross-track leave-one-beam-out uncertainty, which differs between
+   the two refit models.
 5. Make the acquisition step detect empty Harmony subsets automatically.
