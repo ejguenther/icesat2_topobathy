@@ -1,0 +1,21 @@
+A researcher in our group posted analysis on ATL03/ATL08 classifications.  They found that the terrain classificaiton in ATL08 tends to underestimate terrain elevation on slopes, while it appears that the true median terrain better represents terrain elevation on slope.  The next release of ATL24 has a terrain photon classification.  I want to see how ATL24 terrain classifications compare to ATL08 and I want to see if ATL24 classifications also underestimate terrain elevation on slopes, as well as confirm the reserachers findings independendly. 
+
+I want to validate the ATL24 terrain classifications against 3DEP for locations with steep, snow covered mountains, and then compare this to the validation of ATL08.
+
+The researcher posted their notes but they didn't provide too many speicifcs, for example, were they comparing each photon to the 3DEP elevation, were they creating along-track segments with aggregated terrain heights, or if they are using the 20 m geosegments or 100 m land segments found in ATL08.
+
+I think the validation I would want to run would be using 20 m along track segments for both the ATL24 and ATL08 photon classifications.  They don't have to be "exact" geosegments, but the segments need to correspond exactly between the ATL24 and ATL08.  
+
+There are some differences in ATL24 and the ATL03/ATL08: The ATL24 is a .csv with photon classifications.  I believe they are in orthometric heights.  The ATL03 and ATL08 are .h5 files, and h_ph is reported in ellipsoidal heights.  It should be photon-for-photon the same as the ATL24 but I do not know if the ATL24 output is truncated, has noise removed, etc.  
+
+If the ATL08 or ATL24 photon level classifications can be "matched" to each other, I'm picturing a data frame with both of those classification labels as their own columns, which would make comparing the aggregate of terrain height between segments a lot easier.
+
+Then we can compare the error metrics (RMSE, NMAD, MAE) to see which performs better.  
+
+I also want to track instances where each classifier might not classify photons in a 20 m segment (if they both 100% classify terrain photons in the same segment, great, but if there are differences then we need to track those).
+
+I have the whole granule, though I am mainly interested in locations with snowy, steep mountains.
+
+[check with user, this might not be the case anymore: ]I have code in PhoREAL that can do things like read ATL03 photons with ATL08 photon classiifcations, creating segments, etc.  Though I believe we will need code reading the ATL28 .csv files and also need to check what the deal is with those .csvs if they are compatiable with the way the script reads the ATL03/ATL08 dataframes.  For this work, we just need to compare the 3DEP terrain elevation DTM so we may need to code to download and stage it, and possibly code to itegrate that into the validation capabilities already in phoreal.  
+
+https://claude.ai/artifact/RawM5uonGs4WtgsrbnPhHB#slide-52c2efecf7a5

@@ -364,29 +364,95 @@ def get_atl03_metadata(file_path, gt):
         "direction": flight_dir
     }
 
-def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
+# GPS seconds at the ATLAS SDP epoch (2018-01-01T00:00:00Z):
+# delta_time = GPS_SECONDS - ATLAS_SDP_GPS_EPOCH
+ATLAS_SDP_GPS_EPOCH = 1198800018.0
+
+ATL24_CSV_DTYPES = {
+    'GPS_SECONDS': 'float64', 'h_ph': 'float64', 'class_ph': 'int16',
+    'atl24_prob_0': 'float32', 'atl24_prob_1': 'float32', 'atl24_prob_2': 'float32',
+    'atl24_prob_3': 'float32', 'atl24_prob_4': 'float32', 'ortho_h': 'float64',
+}
+
+
+def read_atl24_csv(csv_file, atl03_file=None, gt=None, cache_file=None,
+                   tol_time_s=1e-5, tol_h_m=1e-2):
+    """
+    Read a per-beam ATL24 photon CSV (one row per ATL03 photon, in ATL03 order).
+
+    These CSVs (columns GPS_SECONDS, lat_ph, lon_ph, h_ph, X_ATC, geoid, SPOT,
+    quality_ph, class_ph, atl24_prob_0..4, ortho_h) hold every ATL03 photon of
+    the beam, so they join to ATL03 on row index. With ``atl03_file`` and
+    ``gt`` the join is checked: equal row count, delta_time within
+    ``tol_time_s`` and h_ph within ``tol_h_m`` for every photon. A mismatch
+    raises ValueError.
+
+    ``cache_file`` (parquet): read from it if it exists and is newer than the
+    CSV, otherwise write it after parsing (the CSVs are 0.3 to 1.5 GB).
+
+    Returns a DataFrame with atl24_class (int16), atl24_prob_0..4 (float32)
+    and ortho_h, plus atl24_gps_seconds and atl24_h_ph for traceability.
+    """
+    csv_file = str(csv_file)
+    df = None
+    if cache_file is not None and os.path.exists(cache_file) \
+            and os.path.getmtime(cache_file) >= os.path.getmtime(csv_file):
+        df = pd.read_parquet(cache_file)
+    if df is None:
+        from pyarrow import csv as pacsv
+        cols = list(ATL24_CSV_DTYPES)
+        tbl = pacsv.read_csv(csv_file, convert_options=pacsv.ConvertOptions(include_columns=cols))
+        df = tbl.to_pandas()
+        missing = [c for c in cols if c not in df.columns]
+        if missing:
+            raise ValueError(f"{csv_file}: missing ATL24 columns {missing}")
+        df = df.astype(ATL24_CSV_DTYPES)
+        df = df.rename(columns={'class_ph': 'atl24_class', 'GPS_SECONDS': 'atl24_gps_seconds',
+                                'h_ph': 'atl24_h_ph'})
+        if cache_file is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(cache_file)), exist_ok=True)
+            df.to_parquet(cache_file, index=False)
+
+    if atl03_file is not None:
+        if gt is None:
+            raise ValueError("gt is required to check the ATL24 CSV against ATL03")
+        with h5py.File(atl03_file, 'r') as f:
+            dt = f[gt + '/heights/delta_time'][:]
+            h = f[gt + '/heights/h_ph'][:]
+        if len(dt) != len(df):
+            raise ValueError(f"{csv_file}: {len(df)} rows but ATL03 {gt} has {len(dt)} photons")
+        d_t = np.abs(df['atl24_gps_seconds'].to_numpy() - ATLAS_SDP_GPS_EPOCH - dt)
+        d_h = np.abs(df['atl24_h_ph'].to_numpy() - h)
+        if len(df) and (d_t.max() > tol_time_s or d_h.max() > tol_h_m):
+            raise ValueError(f"{csv_file}: rows do not line up with ATL03 {gt} "
+                             f"(max |dt| {d_t.max():.3g} s, max |dh| {d_h.max():.3g} m)")
+    return df
+
+
+def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None,
+                          atl24_cache=None):
     """
     Reads ATL03 and optionally merges ATL08 and ATL24 data.
     Returns a single aligned DataFrame.
+
+    ``atl24_file`` may be an ATL24 HDF5 granule (mapped through index_ph) or a
+    per-beam ATL24 CSV (``*.csv``, joined row for row and checked, see
+    ``read_atl24_csv``; ``atl24_cache`` is its parquet cache). The CSV class
+    codes differ from the HDF5 ones (2 = terrain), so the combined/contested
+    ATL08+ATL24 columns are only made for the HDF5 input.
     """
     # 1. Base: Read ATL03 (This is common to ALL workflows)
     with h5py.File(atl03_file, 'r') as f:
-        # Read ATL03
-        lon_ph = np.array(f[gt + '/heights/lon_ph'])
-        lat_ph = np.array(f[gt + '/heights/lat_ph'])
-        h_ph = np.array(f[gt + '/heights/h_ph'])
-        
         # Read photon rate ATL03 data
         lon_ph = np.array(f[gt + '/heights/lon_ph'])
         lat_ph = np.array(f[gt + '/heights/lat_ph'])
         h_ph = np.array(f[gt + '/heights/h_ph'])
         quality_ph = np.array(f[gt + '/heights/quality_ph'])
         delta_time = np.array(f[gt + '/heights/delta_time'])
-        signal_conf_ph0 = np.array(f[gt + '/heights/signal_conf_ph'])[:,0]
-        signal_conf_ph1 = np.array(f[gt + '/heights/signal_conf_ph'])[:,1]
-        signal_conf_ph2 = np.array(f[gt + '/heights/signal_conf_ph'])[:,2]
-        signal_conf_ph3 = np.array(f[gt + '/heights/signal_conf_ph'])[:,3]
-        signal_conf_ph4 = np.array(f[gt + '/heights/signal_conf_ph'])[:,4]
+        signal_conf = np.array(f[gt + '/heights/signal_conf_ph'])
+        signal_conf_ph0, signal_conf_ph1, signal_conf_ph2, signal_conf_ph3, signal_conf_ph4 = \
+            (signal_conf[:, i] for i in range(5))
+        del signal_conf
 
 
         # Read ATL03 segment rate at ATL03 photon rate
@@ -435,7 +501,14 @@ def read_photon_dataframe(atl03_file, gt, atl08_file=None, atl24_file=None):
         data_dict["h_norm"] = atl08_norm
 
     # Optional: Add ATL24
-    if atl24_file:
+    if atl24_file and str(atl24_file).lower().endswith('.csv'):
+        df24 = read_atl24_csv(atl24_file, atl03_file, gt, cache_file=atl24_cache)
+        data_dict["atl24_class"] = df24['atl24_class'].to_numpy()
+        data_dict["ortho_h"] = df24['ortho_h'].to_numpy()
+        for c in df24.columns:
+            if c.startswith('atl24_prob_'):
+                data_dict[c] = df24[c].to_numpy()
+    elif atl24_file:
         atl24_class = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt)
         atl24_ortho = processing.get_atl24_to_atl03(atl03_file, atl24_file, gt, '/ortho_h')
         

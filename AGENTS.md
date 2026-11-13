@@ -16,7 +16,7 @@ conda env: it has the **old** phoreal 3.31.1 egg, which other repos
 | Path | Purpose |
 |---|---|
 | `src/phoreal/io/` | `readers`, `processing`, `metadata`: parse ATL03/08/24 HDF5 into photon DataFrames |
-| `src/phoreal/geo/` | `datum_transforms` (NAD83↔WGS84, geoid lookups), `geographic_utils` (UTM zone, distances) |
+| `src/phoreal/geo/` | `datum_transforms` (NAD83↔WGS84, geoid lookups), `geographic_utils` (UTM zone, distances), `dem` (ITRF→3DEP frame via pyproj, DEM stack sampling, plane-fit slope) |
 | `src/phoreal/als/` | `swath` (ALS swath along a track), `las_extent` / `tif_extent` / `reference_extent` / `area` (tile extents, target lookups), `lidar_processing_draft` (WIP) |
 | `src/phoreal/analysis.py`, `agg_configs.py` | Aggregation stats and the ATL/ATL08/ALS recipes |
 | `src/phoreal/geolocation.py` | Grid interpolation + MAE cost for offset optimization |
@@ -27,6 +27,7 @@ conda env: it has the **old** phoreal 3.31.1 egg, which other repos
 | `projects/footprint/` | Building-footprint geolocation work (ForestSat26): `building_processing.py`, batch/offset scripts, notebooks |
 | `projects/fl_mangrove_topobathy/` | Config for `scripts/run_pipeline.py` (Florida AOI) |
 | `projects/geolocation/` | ICESat-2 geolocation error vs. Poland 2025 ALS: tile inventory, granule download, batch offsets (`docs/` has the project brief) |
+| `projects/atl24_terrain_val/` | ATL24 terrain vs ATL08 ground vs 3DEP 1 m DTM on 20 m geosegments (slope bias, after Shean): photon build, 3DEP COG corridor staging, segment table, metrics |
 | `projects/atl24_labels/` | `label_check.py`: ATL24 label CSV QA |
 | `projects/planet_timelapse/` | Unrelated Planet Labs download/timelapse utility |
 

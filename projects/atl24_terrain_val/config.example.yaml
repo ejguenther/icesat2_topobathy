@@ -1,0 +1,28 @@
+# Copy to config.yaml (gitignored) and fill in paths for your machine.
+# Relative paths are resolved against this folder.
+
+granule:
+  atl03: "data/ATL03_YYYYMMDDhhmmss_RRRRCCSS_007_01.h5"
+  atl08: "data/ATL08_YYYYMMDDhhmmss_RRRRCCSS_007_01.h5"
+  # Per-beam ATL24 CSVs; {gt} is replaced by gt1l, gt1r, ...
+  atl24_csv: "data/ATL03_YYYYMMDDhhmmss_RRRRCCSS_007_01_{gt}_ATL24.csv"
+
+beams: [gt1l, gt1r, gt2l, gt2r, gt3l, gt3r]
+
+# ATL24 class codes (class_ph)
+atl24_classes:
+  terrain: 2
+
+work_dir: "outputs"          # photon/segment parquet, figures (gitignored by name)
+dem_dir: "data/3dep"         # cropped 3DEP 1 m corridor tiles + manifest
+
+dem:
+  corridor_buffer_m: 100     # half-width of the DTM corridor around each beam
+  slope_window_m: 40         # plane-fit window for slope / aspect (Shean: 40 m)
+
+analysis:
+  min_photons: [1, 5, 10]    # sweep for "classifier found terrain in this segment"
+  slope_bin_deg: 2.5
+  mountain:                  # subset of interest (steep, high terrain)
+    min_elev_m: 1500
+    min_slope_deg: 10
